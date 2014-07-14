@@ -29,7 +29,7 @@ bl_info = {
     "version": (1, 0),
     "blender": (2, 70, 0),
     "location": "View3D > Toolshelf ",
-    "description": "Run your sniplets as operators",
+    "description": "Run your snipletts as operators",
     "warning": "",
     "wiki_url": "",
     "tracker_url": "",
@@ -73,7 +73,7 @@ def save_preset(text):
     textblock.name=bpy.path.basename(filepath)
     textblock.filepath=filepath
     
-class VIEW3D_PT_tools_add_object(bpy.types.Panel):
+class VIEW3D_PT_tools_macro(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_category = "Macro"
@@ -112,8 +112,8 @@ class VIEW3D_PT_tools_add_object(bpy.types.Panel):
             
 class RunMacro(bpy.types.Operator):
     """run macro"""
-    bl_idname = 'text.run_script_by_name'
-    bl_label = 'run_script_by_name'
+    bl_idname = 'text.run_macro'
+    bl_label = 'run_macro'
     bl_options = {'REGISTER', 'UNDO'}
 
     text = bpy.props.StringProperty(name="text block",

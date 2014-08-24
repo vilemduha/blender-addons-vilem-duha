@@ -93,7 +93,7 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
         for t in bpy.data.texts:
               
             row=col.row(align=True)
-            row.operator("text.run_script_by_name", text=t.name).text=t.name
+            row.operator("text.run_macro", text=t.name).text=t.name
             row.operator("text.save_macro", text='', icon='SAVE_COPY').text=t.name
             row.operator("text.unlink_macro", text='', icon='X').text=t.name
             
@@ -338,5 +338,6 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
 
 

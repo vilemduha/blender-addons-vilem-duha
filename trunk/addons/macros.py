@@ -37,11 +37,6 @@ bl_info = {
 
 import bpy,os
 
-
-    
-
-
-
 def preset_path():
     target_path = os.path.join("presets", 'macros')
     target_path = bpy.utils.user_resource('SCRIPTS',
@@ -107,13 +102,13 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
                     #continue
             if not dupli: 
                 row=col.row(align=True)
-                row.operator("text.run_script_by_name", text=t[0]).text=t[1]
+                row.operator("text.run_macro", text=t[0]).text=t[1]
                 row.operator("text.open", text='', icon='FILE_TEXT').filepath=t[1]
             
 class RunMacro(bpy.types.Operator):
     """run macro"""
     bl_idname = 'text.run_macro'
-    bl_label = 'run_macro'
+    bl_label = 'run macro'
     bl_options = {'REGISTER', 'UNDO'}
 
     text = bpy.props.StringProperty(name="text block",

@@ -82,7 +82,7 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
         col = layout.column(align=True)
         
         if self.mlist==[]:
-            print( 'reload' )
+            #print( 'reload' )
             self.mlist=load_presets() 
             
         for t in bpy.data.texts:

@@ -14,7 +14,7 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
@@ -25,9 +25,9 @@
 
 bl_info = {
     "name": "Macro menu",
-    "author": "Vilem Novak",
-    "version": (1, 0),
-    "blender": (2, 70, 0),
+    "author": "Vilem Duha",
+    "version": (1, 1),
+    "blender": (2, 78, 0),
     "location": "View3D > Toolshelf ",
     "description": "Run your snipletts as operators",
     "warning": "",
@@ -67,30 +67,37 @@ def save_preset(text):
     f.close()
     textblock.name=bpy.path.basename(filepath)
     textblock.filepath=filepath
-    
+ 
+
 class VIEW3D_PT_tools_macro(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_category = "Macro"
+    
+    bl_label = "Macros"
+    bl_idname = "VIEW3D_PT_tools_macro"
     #bl_context = "objectmode"
-    bl_label = "macros"
+    #bl_category = "Tools"
+        
     
     mlist=[]
     
     def draw(self, context):
+        
         layout = self.layout
         col = layout.column(align=True)
         
         if self.mlist==[]:
             #print( 'reload' )
             self.mlist=load_presets() 
-            
+        
         for t in bpy.data.texts:
               
             row=col.row(align=True)
-            row.operator("text.run_macro", text=t.name).text=t.name
-            row.operator("text.save_macro", text='', icon='SAVE_COPY').text=t.name
-            row.operator("text.unlink_macro", text='', icon='X').text=t.name
+            
+            row.operator("object.run_macro", text=t.name).text=t.name
+            row.operator("object.save_macro", text='', icon='SAVE_COPY').text=t.name
+            row.operator("object.unlink_macro", text='', icon='X').text=t.name
             
          
         col.separator()
@@ -102,15 +109,20 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
                     #continue
             if not dupli: 
                 row=col.row(align=True)
-                row.operator("text.run_macro", text=t[0]).text=t[1]
+                row.operator("object.run_macro", text=t[0]).text=t[1]
                 row.operator("text.open", text='', icon='FILE_TEXT').filepath=t[1]
-            
+ 
+
 class RunMacro(bpy.types.Operator):
     """run macro"""
-    bl_idname = 'text.run_macro'
+    bl_idname = 'object.run_macro'
     bl_label = 'run macro'
     bl_options = {'REGISTER', 'UNDO'}
-
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+    
     text = bpy.props.StringProperty(name="text block",
                 default='')
     i1 = bpy.props.IntProperty(name="int1", default=0)
@@ -283,7 +295,7 @@ class RunMacro(bpy.types.Operator):
     
 class SaveMacro(bpy.types.Operator):
     """save macro"""
-    bl_idname = 'text.save_macro'
+    bl_idname = 'object.save_macro'
     bl_label = 'save_macro'
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -296,7 +308,7 @@ class SaveMacro(bpy.types.Operator):
     
 class EditMacro(bpy.types.Operator):
     """edit macro"""
-    bl_idname = 'text.edit_macro'
+    bl_idname = 'object.edit_macro'
     bl_label = 'edit_macro'
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -309,7 +321,7 @@ class EditMacro(bpy.types.Operator):
     
 class UnlinkMacro(bpy.types.Operator):
     """save macro"""
-    bl_idname = 'text.unlink_macro'
+    bl_idname = 'object.unlink_macro'
     bl_label = 'unlink_macro'
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -320,19 +332,25 @@ class UnlinkMacro(bpy.types.Operator):
         bpy.data.texts.remove(bpy.data.texts[self.text])
         
         return {'FINISHED'} 
-    
+ 
+ 
 def register():
     
-    bpy.utils.register_module(__name__)
-    #
-    
-    
+    bpy.utils.register_class(RunMacro)
+    bpy.utils.register_class(SaveMacro)
+    bpy.utils.register_class(EditMacro)
+    bpy.utils.register_class(UnlinkMacro)
+    bpy.utils.register_class(VIEW3D_PT_tools_macro)
     
 def unregister():
-    bpy.utils.unregister_module(__name__)
+    bpy.utils.unregister_class(RunMacro)
+    bpy.utils.unregister_class(SaveMacro)
+    bpy.utils.unregister_class(EditMacro)
+    bpy.utils.unregister_class(UnlinkMacro)
+    bpy.utils.unregister_class(VIEW3D_PT_tools_macro)
+
 
 if __name__ == "__main__":
     register()
-
 
 

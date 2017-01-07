@@ -100,7 +100,7 @@ def buildTabDir():
                     if not hasattr(panel, 'orig_category'):
                         panel.orig_category = panel.bl_category
                     panel.bl_category = 'Tools'
-                    panel.options = {'HIDE_HEADER'}
+                    #panel.options = {'HIDE_HEADER'}
                     #pinfo[2] = panel.bl_category
                 
                 spaces[st][rt].append(panel)
@@ -719,10 +719,9 @@ def register():
         #print(d)
         exec(d)
     for pname in panelIDs:
+        print('register ', pname)
         bpy.utils.register_class(eval(pname))
-    #panels = getRegisterable()
-    #for p in panels:
-    #    bpy.utils.register_class(p)
+   
     bpy.utils.register_class(ActivatePanel)
     bpy.utils.register_class(ActivateModifier)
     bpy.utils.register_class(ActivateConstraint)
@@ -740,19 +739,30 @@ def register():
      
     
 def unregister():
-    bpy.utils.unregister_class(VIEW3d_PT_Transform)
+    #first, fix the panels:
+    for panel in bpy.types.Scene.panelIDs:
+        
+        if hasattr(panel, 'bl_category'):
+            if hasattr(panel, 'orig_category'):
+                panel.bl_category = panel.orig_category
+    bpy.utils.unregister_class(VIEW3D_PT_Transform)
+    
+    
+    
     definitions, panelIDs = createPanels()
     for d in definitions:
         #print(d)
         exec(d)
     for pname in panelIDs:
-        bpy.utils.unregister_class(eval(pname))
+        #print('unregister ', pname)
+        if hasattr(bpy.types, pname):
+            bpy.utils.unregister_class(eval('bpy.types.'+pname))
     
-    #panels = getRegisterable()
-    
-    #for p in panels:
-    #    bpy.utils.unregister_class(p)
     bpy.utils.unregister_class(ActivatePanel)
+    bpy.utils.unregister_class(ActivateModifier)
+    bpy.utils.unregister_class(ActivateConstraint)
+    bpy.utils.unregister_class(ActivatePoseBoneConstraint)
+    bpy.utils.unregister_class(tabSetups)
     
 
 if __name__ == "__main__":

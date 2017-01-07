@@ -13,9 +13,11 @@ bl_info = {
 
 import bpy,os
 
-import bpy
+import bpy, bpy_types
 
 DEFAULT_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES', 'draw','draw_header', 'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'opoll', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
+
+NOCOPY_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES',  'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'opoll', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
 
 class tabSetups(bpy.types.PropertyGroup):
     '''stores data for tabs'''
@@ -41,40 +43,41 @@ def nopoll(cls, context):
 def yespoll(cls, context):
     return True
     
-    
+DONT_USE = [ 'DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints']   
 def getPanelIDs():
     
     panelIDs = []
     panel_tp = bpy.types.Panel
     for tp_name in dir(bpy.types):
-        if tp_name.find('_tabs')==-1:
+        if tp_name.find('_tabs')==-1 and tp_name not in DONT_USE:
             tp = getattr(bpy.types, tp_name)
             #print(tp)
             if tp == panel_tp or not issubclass(tp, panel_tp):
                 continue
-     
-            panelIDs.append(tp)
-            if tp.is_registered!=True:
-                print('not registered', tp.bl_label)
-            
+                
+            if (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
+                print(tp.bl_rna.identifier)
+            if not (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
+                panelIDs.append(tp)
+                if tp.is_registered!=True:
+                    print('not registered', tp.bl_label)
+           
     #print(tp)
     return panelIDs
+   
+class myPanel:
+    pass
     
-    '''
-    tstrings = dir(bpy.types)
-    panelIDs = []
-    for i,p in enumerate(tstrings):
-        ispanel = False
-        if p.find('_PT_')>-1 and p.find('_tabs')==-1:
-            ispanel = True
-        if ispanel:
-            panelIDs.append(p)
-    
-    return panelIDs
-    '''
+'''
+DATA_PT_modifiers.draw = modifiersDraw
+    bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
+    bpy.types.BONE_PT_constraints.draw = 
+'''
+
 def buildTabDir():
     spaces={}
-    
+    newclasses = ()
+    print('called buildtabdir')
     for panel in bpy.types.Scene.panelIDs:
         #panel = p#eval('bpy.types.'+p)
         #print((panel.bl_label))
@@ -90,24 +93,33 @@ def buildTabDir():
                     #print(rt)
                     if spaces[st].get(rt)==None:
                         spaces[st][rt] = []
-                
-                
-                #pinfo = [p, None, None, panel.bl_label]
-                #if hasattr(panel, 'bl_context'):
-                #    pinfo[1] = panel.bl_context
-
+                #cat = ''
                 if hasattr(panel, 'bl_category'):
                     if not hasattr(panel, 'orig_category'):
                         panel.orig_category = panel.bl_category
+                    #cat ='bl_category = "%s"' % panel.bl_category
                     panel.bl_category = 'Tools'
-                    #panel.options = {'HIDE_HEADER'}
-                    #pinfo[2] = panel.bl_category
+                '''
+                pdef = "class %s(bpy.types.Panel):\n    bl_space_type = '%s'\n    bl_region_type = '%s'\n    %s\n    COMPAT_ENGINES = {'BLENDER_RENDER', }\n    bl_label = ''\n    bl_options = {'HIDE_HEADER'}\n    bl_idname = '%s'\n"  
+                identifier = panel.realID+'_TABBED'
+                identifier = identifier.replace('.','_')
+                classdef = pdef % (identifier, panel.bl_space_type, panel.bl_region_type, cat,  identifier )
+                exec(classdef)
+                npanel = eval(identifier)
                 
+                for nprop in dir(panel):
+                    if nprop not in NOCOPY_PANEL_PROPS:
+                        exec('npanel.'+nprop+ ' = panel.'+nprop)
+                '''
                 spaces[st][rt].append(panel)
-                #if hasattr(panel, 'bl_category'):
-                    #panel.bl_context = 'none'
-                 #   panel.bl_region_type = 'WINDOW'
-    
+                
+                try:
+                    panel.realID = panel.bl_rna.identifier
+                    bpy.utils.unregister_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
+                    #print('haha')
+                    #bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
+                except:
+                    pass;
     for sname in spaces:
         space = spaces[sname]
         for rname in space:
@@ -117,7 +129,7 @@ def buildTabDir():
     return spaces 
      
 def getPanels(getspace, getregion):
-    if not hasattr(bpy.types.Scene, 'panels'):# or random.random()<0.01:
+    if not hasattr(bpy.types.Scene, 'panelIDs'):# or random.random()<0.01:
         bpy.types.Scene.panels = getPanelIDs()
         #if not hasattr(bpy.types.Scene, 'panelSpaces'):
         bpy.types.Scene.panelSpaces = buildTabDir()
@@ -134,8 +146,8 @@ def layoutActive(self,context):
     layout.active = True
     layout.enabled = True
     #layout.label('\n\n\n\n\n\n\n\n\n')
-    for a in range(0,90):
-        r = layout.separator()
+    #for a in range(0,90):
+    #    r = layout.separator()
         
 def layoutSeparator(self,context):
     layout = self.layout
@@ -174,12 +186,14 @@ def drawTabs(self,context,plist, tabID):
         for p in plist:
             if p.bl_label!='Preview':
                 col1=row.column(align = True)
-                if self.activetab == p.bl_rna.identifier:
+               # print(self.activetab , p.realID, p.bl_label, p.bl_context)
+                #print(dir(p))
+                if self.activetab == p.realID:#p.realID:
                     drawPanel = p
                     op = col1.operator("wm.activate_panel", text=p.bl_label , emboss = False)
                 else:
                     op = col1.operator("wm.activate_panel", text=p.bl_label , emboss = True )
-                op.panel_id=p.bl_rna.identifier
+                op.panel_id=p.realID
                 op.tabpanel_id=tabID
                 ti+=1
                 if ti == wtabcount:
@@ -205,11 +219,11 @@ def drawTabs(self,context,plist, tabID):
             '''
             if len(category)<2:
                 p=category[0]
-                if self.activetab == p.bl_rna.identifier:
+                if self.activetab == p.realID:
                     op = row.operator("wm.activate_panel", text=p.bl_label , emboss = True )
                     drawPanel = p
                 else:
-                op.panel_id=p.bl_rna.identifier
+                op.panel_id=p.realID
                 op.tabpanel_id=tabID
             else:
             '''
@@ -243,12 +257,12 @@ def drawTabs(self,context,plist, tabID):
             for p in category:
                 if p.bl_label!='Preview':
                     
-                    if self.activetab == p.bl_rna.identifier:
+                    if self.activetab == p.realID:
                         drawPanel = p
                         op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = False, icon = icon)
                     else:
                         op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = True , icon = icon)
-                    op.panel_id=p.bl_rna.identifier
+                    op.panel_id=p.realID
                     op.tabpanel_id=tabID
                     ti+=1
                     if ti == wtabcount:
@@ -395,7 +409,7 @@ def drawTabsProperties(self,context):#, getspace, getregion, tabID):
                 exec('tabpanel.'+var +' = p.' + var)
         
         #if (p.bl_label=='Transform'):# and p.bl_space_type == 'VIEW_3D' and  p.bl_region_type == 'UI'):
-            #print(p.bl_rna.identifier)
+            #print(p.realID)
             #print('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')
            # print(dir(p))
             
@@ -406,20 +420,21 @@ def drawTabsProperties(self,context):#, getspace, getregion, tabID):
             
             #p.append(layoutSeparator)
         #if (p.bl_label=='Transform'):# and p.bl_space_type == 'VIEW_3D' and  p.bl_region_type == 'UI'):
-        #    print(p.bl_rna.identifier)
+        #    print(p.realID)
         if not hasattr(p, 'opoll') and hasattr(p, 'poll') and not p.bl_label == 'Object Constraints':# and not (p.bl_label=='Transform' and p.bl_space_type == 'VIEW_3D' and  p.bl_region_type == 'UI'):
+            #eval('bpy_types.bpy_types')
             p.opoll = p.poll
             p.poll = nopoll
             #if hasattr(p,'draw'):
                 #p.odraw = p.draw
                 #p.draw = drawNone
-               
+        #bpy.utils.unregister_class(eval('bpy_types.bpy_types.' + p.realID))    
         #if (p.bl_label=='Transform'):
-        #    print(p.bl_rna.identifier)
+        #    print(p.realID)
         #if p.bl_label == 'Texture Atlas':
         #    print('texture atlas',p.poll(context))
      
-    #print('pre',self.tabcount)
+   # print('pre',self.tabcount)
     self.tabcount = len(draw_tabs_list)
     #print(self.tabcount)
     bpy.types.Scene.panelTabInfo[self.bl_idname] = [self.tabcount, possible_tabs_wider]
@@ -506,6 +521,8 @@ class TabsPanel:
             #print('poll',cls.bl_idname, c, len(tabspanel_info[1]))
         return tabspanel_info==None or len(draw_tabs_list) >1
  
+ 
+   
 #THIS FUNCTION DEFINES ALL THE TABS PANELS.!!! 
 def createPanels():
     spaces = bpy.types.Scene.panelSpaces
@@ -711,6 +728,10 @@ def register():
     bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
 
     bpy.types.Scene.panelIDs = getPanelIDs()
+    #if not hasattr(bpy.types.Scene, 'panels'):# or random.random()<0.01:
+     #   bpy.types.Scene.panels = getPanelIDs()
+        #if not hasattr(bpy.types.Scene, 'panelSpaces'):
+      #  bpy.types.Scene.panelSpaces = buildTabDir()
     bpy.types.Scene.panelSpaces = buildTabDir()
     bpy.types.Scene.panelTabInfo = {}
     #build the classess here!!
@@ -719,7 +740,7 @@ def register():
         #print(d)
         exec(d)
     for pname in panelIDs:
-        print('register ', pname)
+        #print('register ', pname)
         bpy.utils.register_class(eval(pname))
    
     bpy.utils.register_class(ActivatePanel)

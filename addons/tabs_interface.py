@@ -49,7 +49,7 @@ def getPanelIDs():
     panelIDs = []
     panel_tp = bpy.types.Panel
     for tp_name in dir(bpy.types):
-        if tp_name.find('_tabs')==-1 and tp_name not in DONT_USE:
+        if tp_name.find('_tabs')==-1  and tp_name not in DONT_USE: #and tp_name.find('NODE_PT_category_')==-1
             tp = getattr(bpy.types, tp_name)
             #print(tp)
             if tp == panel_tp or not issubclass(tp, panel_tp):
@@ -766,6 +766,8 @@ def unregister():
         if hasattr(panel, 'bl_category'):
             if hasattr(panel, 'orig_category'):
                 panel.bl_category = panel.orig_category
+        panel.realID = panel.bl_rna.identifier
+        bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.realID))
     bpy.utils.unregister_class(VIEW3D_PT_Transform)
     
     

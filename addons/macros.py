@@ -69,6 +69,54 @@ def save_preset(text):
     textblock.filepath=filepath
  
 
+
+class VIEW3D_menu_tools_macro(bpy.types.Menu):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+    bl_category = "Macro"
+    
+    bl_label = "Macros menu"
+    bl_idname = "view3d.macromenu"
+    #bl_context = "objectmode"
+    #bl_category = "Tools"
+        
+    prefix = bpy.props.StringProperty(name="text block",               default='R_')
+    mlist=[]
+    
+    def draw(self, context):
+        #print(dir(self))
+        prefix = 'R_'
+        layout = self.layout
+        col = layout.column(align=True)
+        #print(self.bl_label)
+        if self.mlist==[]:
+            #print( 'reload' )
+            self.mlist=load_presets() 
+        
+        for t in bpy.data.texts:
+              
+            
+            #print(dir(self.layout))
+            #print((self.bl_label))
+            #print(dir(self.path_menu))
+            #print((self.layout._name))
+            if t.name[:2]==self.prefix:
+                col.operator("object.run_macro", text=t.name).text=self.bl_label#t.name
+        col.separator()
+        for t in self.mlist:
+            dupli=False
+            for t1 in bpy.data.texts:
+                if t[0]==t1.name:
+                    dupli=True
+                    #continue
+            if not dupli: 
+                #print(t[1][:2])
+                if t[0][:2]==self.prefix:
+                    col.operator("object.run_macro", text=t[0][2:]).text=t[1]
+
+
+        
+
 class VIEW3D_PT_tools_macro(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
@@ -86,18 +134,29 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
         
         layout = self.layout
         col = layout.column(align=True)
+       # col.menu("view3d.macromenu", text="relief tools")
+        col.prop(bpy.context.scene, 'macro_search_string')
+        op = col.operator("wm.call_menu", text='relief tools')
+        col = layout.column(align=True)
+        op.name = 'view3d.macromenu'
+        #op.prefix='R_'
+        #print(dir(op))
         
         if self.mlist==[]:
             #print( 'reload' )
             self.mlist=load_presets() 
+            
+        search_string = bpy.context.scene.macro_search_string
         
         for t in bpy.data.texts:
-              
-            row=col.row(align=True)
+            #print(self.search_string)
             
-            row.operator("object.run_macro", text=t.name).text=t.name
-            row.operator("object.save_macro", text='', icon='SAVE_COPY').text=t.name
-            row.operator("object.unlink_macro", text='', icon='X').text=t.name
+            if t.name.find(search_string)>-1:
+                row=col.row(align=True)
+                
+                row.operator("object.run_macro", text=t.name).text=t.name
+                row.operator("object.save_macro", text='', icon='SAVE_COPY').text=t.name
+                row.operator("object.unlink_macro", text='', icon='X').text=t.name
             
          
         col.separator()
@@ -108,9 +167,10 @@ class VIEW3D_PT_tools_macro(bpy.types.Panel):
                     dupli=True
                     #continue
             if not dupli: 
-                row=col.row(align=True)
-                row.operator("object.run_macro", text=t[0]).text=t[1]
-                row.operator("text.open", text='', icon='FILE_TEXT').filepath=t[1]
+                if t[0].find(search_string)>-1:
+                    row=col.row(align=True)
+                    row.operator("object.run_macro", text=t[0]).text=t[1]
+                    row.operator("text.open", text='', icon='FILE_TEXT').filepath=t[1]
  
 
 class RunMacro(bpy.types.Operator):
@@ -119,9 +179,9 @@ class RunMacro(bpy.types.Operator):
     bl_label = 'run macro'
     bl_options = {'REGISTER', 'UNDO'}
     
-    @classmethod
-    def poll(cls, context):
-        return True
+    #@classmethod
+    #def poll(cls, context):
+    #    return True
     
     text = bpy.props.StringProperty(name="text block",
                 default='')
@@ -195,18 +255,24 @@ class RunMacro(bpy.types.Operator):
         li=0
         scriptonly=''
         self.props=[[],[],[],[]]
+        
         text=text.split('\n')
         while not end:
             
             l=text[li]
-            
+            #print(l)
+            l=l.replace('\\','\\\\')
             if l.find('=')>-1 and defmore:
                 i=l.find('=')
                 #print(l[:i],l[i+1:])
                 propname=l[:i]
-                propvalue=eval(l[i+1:])
                 
-                ptype=type(propvalue)
+                
+                try:
+                    propvalue=eval(l[i+1:])
+                    ptype=type(propvalue)
+                except:
+                    ptype = None
                 #print(propname,propvalue,ptype)
                 #print(dir(ptype))
                 
@@ -329,9 +395,9 @@ class UnlinkMacro(bpy.types.Operator):
                 default='')
 
     def execute(self, context):
-        bpy.data.texts.remove(bpy.data.texts[self.text])
-        
+        bpy.data.texts.remove(bpy.data.texts[self.text], do_unlink = True)
         return {'FINISHED'} 
+ 
  
  
 def register():
@@ -341,13 +407,16 @@ def register():
     bpy.utils.register_class(EditMacro)
     bpy.utils.register_class(UnlinkMacro)
     bpy.utils.register_class(VIEW3D_PT_tools_macro)
-    
+    bpy.utils.register_class(VIEW3D_menu_tools_macro)
+    bpy.types.Scene.macro_search_string = bpy.props.StringProperty(name = 'Search' , default = '')
+    #set (function) – Function to be called when this value is ‘written’, This function must take 2 values (self, value) 
 def unregister():
     bpy.utils.unregister_class(RunMacro)
     bpy.utils.unregister_class(SaveMacro)
     bpy.utils.unregister_class(EditMacro)
     bpy.utils.unregister_class(UnlinkMacro)
     bpy.utils.unregister_class(VIEW3D_PT_tools_macro)
+    bpy.utils.unregister_class(VIEW3D_menu_tools_macro)
 
 
 if __name__ == "__main__":

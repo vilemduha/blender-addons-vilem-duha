@@ -112,9 +112,9 @@ def buildTabDir():
                         exec('npanel.'+nprop+ ' = panel.'+nprop)
                 '''
                 spaces[st][rt].append(panel)
-                
+                panel.realID = panel.bl_rna.identifier
                 try:
-                    panel.realID = panel.bl_rna.identifier
+                    
                     bpy.utils.unregister_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
                     #print('haha')
                     #bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
@@ -766,8 +766,8 @@ def unregister():
         if hasattr(panel, 'bl_category'):
             if hasattr(panel, 'orig_category'):
                 panel.bl_category = panel.orig_category
-        panel.realID = panel.bl_rna.identifier
-        bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.realID))
+       # panel.realID = panel.bl_rna.identifier
+       # bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.realID))
     bpy.utils.unregister_class(VIEW3D_PT_Transform)
     
     

@@ -16,9 +16,34 @@ import bpy,os
 import bpy, bpy_types
 from bpy.app.handlers import persistent
 
-DEFAULT_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES', 'draw','draw_header', 'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'opoll', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
+_hidden_panels = {}
+_panels = {}
+_context_items = []
+_bl_panel_types = []
 
-NOCOPY_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES',  'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'opoll', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
+
+def hide_panel(tp_name):
+    if tp_name in _hidden_panels:
+        pass
+
+    elif hasattr(bpy.types, tp_name):
+        tp = getattr(bpy.types, tp_name)
+        bpy.utils.unregister_class(tp)
+        _hidden_panels[tp_name] = tp
+
+
+def unhide_panel(tp_name):
+    if tp_name in _hidden_panels:
+       
+        bpy.utils.register_class(_hidden_panels[tp_name])
+        del _hidden_panels[tp_name]
+
+    else:
+        pass
+
+DEFAULT_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES', 'draw','draw_header', 'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
+
+NOCOPY_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES',  'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys',  'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
 
 class tabSetups(bpy.types.PropertyGroup):
     '''stores data for tabs'''
@@ -35,7 +60,7 @@ def getWTabCount(context):
     return wtabcount
 def getlabel(panel):
     return panel.bl_label
-
+''''
 @classmethod
 def nopoll(cls, context):
     return False
@@ -43,7 +68,7 @@ def nopoll(cls, context):
 @classmethod
 def yespoll(cls, context):
     return True
-    
+  '''  
 DONT_USE = [ 'DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints']   
 def getPanelIDs():
     
@@ -115,13 +140,14 @@ def buildTabDir():
                 spaces[st][rt].append(panel)
                 panel.realID = panel.bl_rna.identifier
                 panel.save_rna = panel.bl_rna
-                try:
+                hide_panel(panel.realID)
+                #try:
                     
-                    bpy.utils.unregister_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
+                #    bpy.utils.unregister_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
                     #print('haha')
                     #bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
-                except:
-                    pass;
+                #except:
+                #    pass;
     for sname in spaces:
         space = spaces[sname]
         for rname in space:
@@ -318,11 +344,7 @@ def pollTabs(panelIDs, context):
         if hasattr(p, "poll"):
             
             try:
-                #print (p)
-                if hasattr(p,'opoll'):
-                    polled = p.opoll(context)
-                else:
-                    polled = p.poll(context)
+                polled = p.poll(context)
             except:
                 #print ("Unexpected error:", sys.exc_info()[0])
                 pass;
@@ -423,24 +445,10 @@ def drawTabsProperties(self,context):#, getspace, getregion, tabID):
             
            # print('OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
             #print(dir(self))
-        if not hasattr(p, 'poll'):
-            p.poll = yespoll
+        #if not hasattr(p, 'poll'):
+        #    p.poll = yespoll
             
-            #p.append(layoutSeparator)
-        #if (p.bl_label=='Transform'):# and p.bl_space_type == 'VIEW_3D' and  p.bl_region_type == 'UI'):
-        #    print(p.realID)
-        if not hasattr(p, 'opoll') and hasattr(p, 'poll') and not p.bl_label == 'Object Constraints':# and not (p.bl_label=='Transform' and p.bl_space_type == 'VIEW_3D' and  p.bl_region_type == 'UI'):
-            #eval('bpy_types.bpy_types')
-            p.opoll = p.poll
-            p.poll = nopoll
-            #if hasattr(p,'draw'):
-                #p.odraw = p.draw
-                #p.draw = drawNone
-        #bpy.utils.unregister_class(eval('bpy_types.bpy_types.' + p.realID))    
-        #if (p.bl_label=='Transform'):
-        #    print(p.realID)
-        #if p.bl_label == 'Texture Atlas':
-        #    print('texture atlas',p.poll(context))
+            
      
    # print('pre',self.tabcount)
     self.tabcount = len(draw_tabs_list)
@@ -466,6 +474,7 @@ class ActivatePanel(bpy.types.Operator):
     
     
     def execute(self, context):
+        unhide_panel(self.tabpanel_id)
         tabpanel = eval('bpy.types.' + self.tabpanel_id )
         tabpanel.activetab = self.panel_id
         return {'FINISHED'}
@@ -735,12 +744,14 @@ def getRegisterable():
 def object_select_handler(scene):
     s = bpy.context.scene
     #print('handler')
-    if not hasattr(s,'active_previous'):
-        #print('firsttime')
-        s.active_previous = bpy.context.active_object.name
-    if bpy.context.active_object.name != s.active_previous:
-        print("Selected object", bpy.context.active_object.name)
-        s.active_previous = bpy.context.active_object.name
+    if bpy.context.active_object:
+        if not hasattr(s,'active_previous'):
+            #print('firsttime')
+            s.active_previous = bpy.context.active_object.name
+        if bpy.context.active_object.name != s.active_previous:
+            #print("Selected object", bpy.context.active_object.name)
+            s.active_previous = bpy.context.active_object.name
+        
 
 def register():
     
@@ -788,15 +799,8 @@ def unregister():
         if hasattr(panel, 'bl_category'):
             if hasattr(panel, 'orig_category'):
                 panel.bl_category = panel.orig_category
-          
-        # panel.realID = panel.bl_rna.identifier
-        #try:
-        print (panel.save_rna.identifier)
-        try:
-            panel.bl_rna.identifier = panel.realID
-            bpy.utils.register_class(panel)
-        except:
-            print('not re-registered');
+        unhide_panel(panel.realID)
+        
     bpy.utils.unregister_class(VIEW3D_PT_Transform)
     
     

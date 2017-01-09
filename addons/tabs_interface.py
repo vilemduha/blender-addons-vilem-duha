@@ -14,6 +14,7 @@ bl_info = {
 import bpy,os
 
 import bpy, bpy_types
+from bpy.app.handlers import persistent
 
 DEFAULT_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES', 'draw','draw_header', 'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys', 'opoll', 'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
 
@@ -49,7 +50,7 @@ def getPanelIDs():
     panelIDs = []
     panel_tp = bpy.types.Panel
     for tp_name in dir(bpy.types):
-        if tp_name.find('_tabs')==-1  and tp_name not in DONT_USE: #and tp_name.find('NODE_PT_category_')==-1
+        if tp_name.find('_tabs')==-1  or tp_name not in DONT_USE: #and tp_name.find('NODE_PT_category_')==-1
             tp = getattr(bpy.types, tp_name)
             #print(tp)
             if tp == panel_tp or not issubclass(tp, panel_tp):
@@ -113,6 +114,7 @@ def buildTabDir():
                 '''
                 spaces[st][rt].append(panel)
                 panel.realID = panel.bl_rna.identifier
+                panel.save_rna = panel.bl_rna
                 try:
                     
                     bpy.utils.unregister_class(eval('bpy_types.bpy_types.'+panel.bl_rna.identifier))
@@ -159,18 +161,24 @@ class CarryLayout:
 
 def drawNone(self,context):
     pass;
+
 def drawTabs(self,context,plist, tabID):
     
     wtabcount = getWTabCount(context)
         
     categories={}
+    activetab = self.activetab
+    hasactivetab = False
     for p in plist:
         if hasattr(p,'bl_category'):
             if categories.get(p.orig_category) == None:
                 categories[p.orig_category] = [p]
             else:
                 categories[p.orig_category].append(p)
-      
+        if  self.activetab == p.realID:
+            hasactivetab = True
+    if not hasactivetab:
+        self.activetab = plist[0].realID
     #print(wtabcount)
     
     ti = 0
@@ -723,8 +731,19 @@ def getRegisterable():
     ActivatePanel,
     )
 
+@persistent
+def object_select_handler(scene):
+    s = bpy.context.scene
+    #print('handler')
+    if not hasattr(s,'active_previous'):
+        #print('firsttime')
+        s.active_previous = bpy.context.active_object.name
+    if bpy.context.active_object.name != s.active_previous:
+        print("Selected object", bpy.context.active_object.name)
+        s.active_previous = bpy.context.active_object.name
 
 def register():
+    
     bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
 
     bpy.types.Scene.panelIDs = getPanelIDs()
@@ -753,10 +772,13 @@ def register():
     bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
     bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
     
+    bpy.types.Scene.active_previous = bpy.props.StringProperty(name = 'active object previous', default = '')
     bpy.types.Object.active_modifier = bpy.props.StringProperty(name = 'active modifier', default = '')
     bpy.types.Object.active_constraint = bpy.props.StringProperty(name = 'active constraint', default = '')
     bpy.types.PoseBone.active_constraint = bpy.props.StringProperty(name = 'active constraint', default = '')
     bpy.types.Scene.panelTabData = bpy.props.CollectionProperty(type=tabSetups)
+    bpy.app.handlers.scene_update_pre.append(object_select_handler)
+    
      
     
 def unregister():
@@ -766,8 +788,15 @@ def unregister():
         if hasattr(panel, 'bl_category'):
             if hasattr(panel, 'orig_category'):
                 panel.bl_category = panel.orig_category
-       # panel.realID = panel.bl_rna.identifier
-       # bpy.utils.register_class(eval('bpy_types.bpy_types.'+panel.realID))
+          
+        # panel.realID = panel.bl_rna.identifier
+        #try:
+        print (panel.save_rna.identifier)
+        try:
+            panel.bl_rna.identifier = panel.realID
+            bpy.utils.register_class(panel)
+        except:
+            print('not re-registered');
     bpy.utils.unregister_class(VIEW3D_PT_Transform)
     
     
@@ -790,3 +819,5 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+    
+    #https://github.com/meta-androcto/blenderpython/tree/master/scripts/addons_extern/AF_view3d_mod https://github.com/meta-androcto/blenderpython/tree/master/scripts/addons_extern/AF_view3d_toolbar_mod

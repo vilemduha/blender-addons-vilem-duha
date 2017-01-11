@@ -71,12 +71,23 @@ class panelData(bpy.types.PropertyGroup):
     pin = bpy.props.BoolProperty(name="pin", default=False, update = updatePin)
     
 	
-def getWTabCount(context):
+def getWTabProps(context):
     w = context.region.width
     wtabcount = int(w/110)
     if wtabcount == 0:
         wtabcount = 1
-    return wtabcount
+        
+    variable_width = bpy.context.user_preferences.addons["tabs_interface"].preferences.variable_width
+    
+    wlettercount = int(w/10)
+    if wlettercount == 0:
+        wlettercount = 1
+    
+    
+    return variable_width, wtabcount, wlettercount
+    
+    
+    
 def getlabel(panel):
     return panel.bl_label
 ''''
@@ -210,20 +221,15 @@ def tabRow(layout, variable_width):
     return row
     
 def drawTabs(self,context,plist, tabID):
+    variable_width, wtabcount, wlettercount = getWTabProps(context)
     
-    variable_width = bpy.context.user_preferences.addons["tabs_interface"].preferences.variable_width
-
-    w = context.region.width
-    width_letters = int(w/10)
-    if width_letters == 0:
-        width_letters = 1
     
     s = bpy.context.scene
     tabpanel_data = s.panelTabData.get(tabID)
     if tabpanel_data == None:
         return []
         
-    wtabcount = getWTabCount(context)
+    
     
     draw_panels = []    
     categories={}
@@ -251,10 +257,10 @@ def drawTabs(self,context,plist, tabID):
     #print(wtabcount)
     
     ti = 0
+    totalwidth = 0
     preview= None
     layout = self.layout
    
-    totalwidth = 0
     
     if len(plist)>1 and len(categories)==0:#property windows
         
@@ -280,12 +286,13 @@ def drawTabs(self,context,plist, tabID):
                     op = row.operator("wm.activate_panel", text=p.bl_label , emboss = True )
                 op.panel_id=p.realID
                 op.tabpanel_id=tabID
+                
                 ti+=1
-                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>width_letters):
+                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
                     ti = 0
+                    totalwidth = 0
                     row=tabRow(col, variable_width)
                     
-                    totalwidth = 0
                     
             else:
                 preview = p
@@ -306,12 +313,13 @@ def drawTabs(self,context,plist, tabID):
             #box.scale_y = 0.9
             row=tabRow(box, variable_width)
             #sep = col.separator()
+            #icon = 'RIGHTARROW'
             if len(category)>1:
                 #col = layout.column(align = True)
                 ti=1
                 
                 #row.scale_y = 0.5
-                row.label(cname)
+                row.label(cname, icon = icon)#, icon = 'ANTIALIASED'
                 totalwidth+= len(cname)
                # row=tabRow(box, variable_width)
                
@@ -320,12 +328,14 @@ def drawTabs(self,context,plist, tabID):
                 #icon = 'NONE'
             else:
                 #col = layout.column(align = True)
-                row.label(cname)
+                ti+=1
+                row.label(cname, icon = icon)
+                totalwidth+= len(cname)
                 #prepend = cname+' >> '
                 #icon = 'ANTIALIASED'
                 #col = layout.column(align = True)
             #row = col.row(align = True)
-            
+            #icon = 'NONE'
             for p in category:
                 if p.bl_label!='Preview':
                     totalwidth+= len(p.bl_label)
@@ -338,7 +348,7 @@ def drawTabs(self,context,plist, tabID):
                     op.panel_id=p.realID
                     op.tabpanel_id=tabID
                     ti+=1
-                    if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>width_letters):
+                    if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
                         row=tabRow(col, variable_width)
                         ti = 0
                         totalwidth = 0
@@ -357,16 +367,141 @@ def drawTabs(self,context,plist, tabID):
     if preview != None:
         preview.draw(self, context)
     return draw_panels
+
+
+def modifiersDraw(self, context):
+    variable_width, wtabcount, wlettercount = getWTabProps(context)
+        
+    layout = self.layout
+
+    ob = context.object
+    layout.operator_menu_enum("object.modifier_add", "type")
+    
+    ti = 0
+    totalwidth = 0
+    if len(ob.modifiers)>0:
+       
+        col = layout.column(align = True)
+        row = tabRow(col, variable_width)
+        active_modifier = ob.active_modifier
+        if not ob.active_modifier in ob.modifiers:
+            active_modifier = ob.modifiers[0].name
+        if len(ob.modifiers)>1:
+            for md in ob.modifiers:
+                totalwidth+= len(md.name)
+                if md.name==active_modifier:
+                    op = row.operator("object.activate_modifier", text=md.name, emboss = False).modifier_name = md.name
+                else:
+                    op = row.operator("object.activate_modifier", text=md.name, emboss = True).modifier_name = md.name
+                ti+=1
+                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
+                    ti = 0
+                    totalwidth = 0
+                    row=tabRow(col, variable_width)
+                
+        
+        md = ob.modifiers[active_modifier]
+        box = layout.template_modifier(md)
+        if box:
+            # match enum type to our functions, avoids a lookup table.
+            getattr(self, md.type)(box, ob, md)
+
+def constraintsDraw(self, context):
+    variable_width, wtabcount, wlettercount = getWTabProps(context)
+    
+
+    layout = self.layout
+
+    ob = context.object
+
+    if ob.type == 'ARMATURE' and ob.mode == 'POSE':
+        box = layout.box()
+        box.alert = True  # XXX: this should apply to the box background
+        box.label(icon='INFO', text="Constraints for active bone do not live here")
+        box.operator("wm.properties_context_change", icon='CONSTRAINT_BONE',
+                     text="Go to Bone Constraints tab...").context = 'BONE_CONSTRAINT'
+    else:
+        layout.operator_menu_enum("object.constraint_add", "type", text="Add Object Constraint")
+    
+    ti = 0
+    totalwidth = 0
+    
+    if len(ob.constraints)>0:
+        col = layout.column(align = True)
+        row = tabRow(col, variable_width)
+        i=0
+        active_constraint = ob.active_constraint
+        if not ob.active_constraint in ob.constraints:
+            active_constraint = ob.constraints[0].name
+        if len(ob.constraints)>1:
+            for con in ob.constraints:
+                totalwidth += len(con.name)
+                if con.name==active_constraint:
+                    op = row.operator("object.activate_constraint", text=con.name, emboss = False)
+                else:
+                    op = row.operator("object.activate_constraint", text=con.name, emboss = True)
+                op.constraint_name = con.name
+                ti+=1
+                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
+                    ti = 0
+                    totalwidth = 0
+                    row=tabRow(col, variable_width)
+                
+        con = ob.constraints[active_constraint]
+        self.draw_constraint(context, con)    
+       
+      
+def boneConstraintsDraw(self, context):
+    variable_width, wtabcount, wlettercount = getWTabProps(context)
+    layout = self.layout
+
+    layout.operator_menu_enum("pose.constraint_add", "type", text="Add Bone Constraint")
+    pb = context.pose_bone
+    
+    ti = 0
+    totalwidth = 0
+    if len(pb.constraints)>0:
+    
+        col = layout.column(align = True)
+        row = col.row(align = True)
+        
+        active_constraint = pb.active_constraint
+        if not pb.active_constraint in pb.constraints:
+            active_constraint = pb.constraints[0].name
+        if len(pb.constraints)>1:
+            for con in pb.constraints:
+                totalwidth += con.name
+                if con.name==active_constraint:
+                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = False)
+                else:
+                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = True)
+                op.constraint_name = con.name
+                ti+=1
+                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
+                    ti = 0
+                    totalwidth = 0
+                    row=tabRow(col, variable_width)
+                
+        con = pb.constraints[active_constraint]
+        self.draw_constraint(context, con)    
     
 def drawPanels(self, context, draw_panels):
     layout = self.layout
     for drawPanel in draw_panels:
-        
+        '''
+        tabpanel = self
+        p = drawPanel
+        for var in dir(p):
+            if var not in DEFAULT_PANEL_PROPS:
+                exec('tabpanel.'+var +' = p.' + var)
+        '''
         #layout.separator()
         #if len(drawPanels)>1 or hasattr(drawPanel, "draw_header"):
         box = layout.box()
-        #box.scale_x = 0.2
         box.scale_y =.8
+        # box = layout.column(align = True)#.box()
+        #box.scale_x = 0.2
+        #box.scale_y =.8
         #print(layout.introspect())
         row = box.row()
         row.scale_y=.8
@@ -384,6 +519,9 @@ def drawPanels(self, context, draw_panels):
         if pd.pin: icon = 'PINNED'
         else: icon = 'UNPINNED'
         row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon)
+        #box = layout.box()
+        #box.scale_y =.01
+        #emptyrow = box.row()
         if hasattr(drawPanel, "draw"):
             #self.layout = box
             #col = layout.column()
@@ -692,7 +830,18 @@ def createPanels():
                 panelIDs.append(pname)
                 
     return definitions,panelIDs
-
+class VIEW3D_PT_transform(bpy.types.Panel):
+    bl_label = "Transform"
+    bl_idname = "VIEW3D_PT_transform"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    
+    @classmethod
+    def poll(cls, context):
+        return False
+    def draw(self, context):
+        pass;
+        
 class VIEW3D_PT_Transform(bpy.types.Panel):
     bl_label = "Transform"
     bl_idname = "VIEW3D_PT_Transform"
@@ -732,113 +881,6 @@ class VIEW3D_PT_Transform(bpy.types.Panel):
         row.column(align = True).prop(ob, "lock_scale")
 
 
-def modifiersDraw(self, context):
-    variable_width = bpy.context.user_preferences.addons["tabs_interface"].preferences.variable_width
-
-    wtabcount = getWTabCount(context)
-        
-    layout = self.layout
-
-    ob = context.object
-    layout.operator_menu_enum("object.modifier_add", "type")
-    
-    
-    if len(ob.modifiers)>0:
-        i=0
-        col = layout.column(align = True)
-        row = tabRow(col)
-        active_modifier = ob.active_modifier
-        if not ob.active_modifier in ob.modifiers:
-            active_modifier = ob.modifiers[0].name
-        if len(ob.modifiers)>1:
-            for md in ob.modifiers:
-                
-                if md.name==active_modifier:
-                    op = row.operator("object.activate_modifier", text=md.name, emboss = False).modifier_name = md.name
-                else:
-                    op = row.operator("object.activate_modifier", text=md.name, emboss = True).modifier_name = md.name
-                i+=1
-                if i == wtabcount:
-                    i=0
-                    row = tabRow(col)
-        
-        
-        md = ob.modifiers[active_modifier]
-        box = layout.template_modifier(md)
-        if box:
-            # match enum type to our functions, avoids a lookup table.
-            getattr(self, md.type)(box, ob, md)
-
-def constraintsDraw(self, context):
-    wtabcount = getWTabCount(context)
-    
-
-    layout = self.layout
-
-    ob = context.object
-
-    if ob.type == 'ARMATURE' and ob.mode == 'POSE':
-        box = layout.box()
-        box.alert = True  # XXX: this should apply to the box background
-        box.label(icon='INFO', text="Constraints for active bone do not live here")
-        box.operator("wm.properties_context_change", icon='CONSTRAINT_BONE',
-                     text="Go to Bone Constraints tab...").context = 'BONE_CONSTRAINT'
-    else:
-        layout.operator_menu_enum("object.constraint_add", "type", text="Add Object Constraint")
-    
-    if len(ob.constraints)>0:
-        col = layout.column(align = True)
-        row = tabRow(col)
-        i=0
-        active_constraint = ob.active_constraint
-        if not ob.active_constraint in ob.constraints:
-            active_constraint = ob.constraints[0].name
-        if len(ob.constraints)>1:
-            for con in ob.constraints:
-                if con.name==active_constraint:
-                    op = row.operator("object.activate_constraint", text=con.name, emboss = False)
-                else:
-                    op = row.operator("object.activate_constraint", text=con.name, emboss = True)
-                op.constraint_name = con.name
-                i+=1
-                if i == wtabcount:
-                    i=0
-                    row = tabRow(col)
-        
-        con = ob.constraints[active_constraint]
-        self.draw_constraint(context, con)    
-       
-      
-def boneConstraintsDraw(self, context):
-    wtabcount = getWTabCount(context)
-    layout = self.layout
-
-    layout.operator_menu_enum("pose.constraint_add", "type", text="Add Bone Constraint")
-    pb = context.pose_bone
-    
-    
-    if len(pb.constraints)>0:
-    
-        col = layout.column(align = True)
-        row = col.row(align = True)
-        i=0
-        active_constraint = pb.active_constraint
-        if not pb.active_constraint in pb.constraints:
-            active_constraint = pb.constraints[0].name
-        if len(pb.constraints)>1:
-            for con in pb.constraints:
-                if con.name==active_constraint:
-                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = False)
-                else:
-                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = True)
-                op.constraint_name = con.name
-                i+=1
-                if i == wtabcount:
-                    i=0
-                    row = col.row(align = True)
-        
-        con = pb.constraints[active_constraint]
-        self.draw_constraint(context, con)    
     
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
@@ -862,7 +904,12 @@ def createSceneTabData():
         if s.panelData.get(p.realID) == None:
             item = bpy.context.scene.panelData.add()
             item.name = p.realID  
-    #print(_tab_panels)
+    print(_tab_panels)
+    if _tab_panels == {}:
+        definitions, panelIDs = createPanels()
+        for pname in panelIDs:
+            pt = eval('bpy.types.'+pname)
+            _tab_panels[pname] = pt    
     for pt in _tab_panels:
         print(pt)
         if s.panelTabData.get(pt) == None:
@@ -872,9 +919,9 @@ def createSceneTabData():
 @persistent
 def scene_load_handler(scene):
     print('load handler')
-    if len(bpy.context.scene.panelData) == 0:
-        createSceneTabData()
-    
+    #if len(bpy.context.scene.panelData) == 0:
+    createSceneTabData()
+    print (bpy.context.scene.panelData)
     
 @persistent
 def object_select_handler(scene):
@@ -892,6 +939,7 @@ def object_select_handler(scene):
 def register():
     
     bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
+    bpy.utils.register_class(VIEW3D_PT_transform)#we need this panel :()
 
     bpy.types.Scene.panelIDs = getPanelIDs()
     #if not hasattr(bpy.types.Scene, 'panels'):# or random.random()<0.01:

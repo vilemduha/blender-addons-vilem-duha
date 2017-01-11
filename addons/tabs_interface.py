@@ -221,8 +221,8 @@ def drawTabs(self,context,plist, tabID):
     s = bpy.context.scene
     tabpanel_data = s.panelTabData.get(tabID)
     if tabpanel_data == None:
+        return []
         
-        tabpanel_data = s.panelTabData[tabID]
     wtabcount = getWTabCount(context)
     
     draw_panels = []    
@@ -854,6 +854,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
  
 
 def createSceneTabData():
+    print('create tab panel data')
     s = bpy.context.scene
     #print('handler')
     for pname in bpy.types.Scene.panelIDs:
@@ -870,6 +871,7 @@ def createSceneTabData():
     
 @persistent
 def scene_load_handler(scene):
+    print('load handler')
     if len(bpy.context.scene.panelData) == 0:
         createSceneTabData()
     

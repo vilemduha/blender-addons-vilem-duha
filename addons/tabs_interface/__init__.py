@@ -71,33 +71,11 @@ class panelData(bpy.types.PropertyGroup):
     #id = bpy.props.StringProperty(name="panel id", default="")
     pin = bpy.props.BoolProperty(name="pin", default=False, update = updatePin)
     
-	
-def getWTabProps(context):
-    w = context.region.width
-    wtabcount = math.floor(w/80)
-    if wtabcount == 0:
-        wtabcount = 1
-    
-    wlettercount = math.floor((w-14)/7)
-    if wlettercount <= 0:
-        wlettercount = 1
-    
-    
-    return wtabcount, wlettercount
-    
-    
+
     
 def getlabel(panel):
     return panel.bl_label
-''''
-@classmethod
-def nopoll(cls, context):
-    return False
 
-@classmethod
-def yespoll(cls, context):
-    return True
-  '''  
 DONT_USE = [ 'DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints']   
 def getPanelIDs():
     
@@ -247,9 +225,9 @@ def tabRow(layout):
     tab_scale = 0.9
     
     
-    row = layout.row(align = not prefs.variable_width)
+    row = layout.row(align = prefs.fixed_width)
     row.scale_y=tab_scale
-    if prefs.variable_width:
+    if not prefs.fixed_width:
         row.alignment = 'LEFT'
     return row
     
@@ -258,25 +236,30 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
     
     
     
-        
+    
+
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     w = context.region.width
-    margin = 5
+    margin = 20
     oplist = []
     if prefs.box:
         layout = layout.box()
     layout = layout.column(align = True)
     
-    if prefs.variable_width:
+    if not prefs.fixed_width:
+        baserest = w - margin
+        restspace = baserest
         
-        restspace = w - margin
         tw = 0
         splitalign = True
         row = tabRow(layout)
         split=row
+        
         for t,id in zip(texts,ids):
             last_tw = tw
-            tw = getApproximateFontStringWidth(t) 
+            if prefs.emboss and restspace != baserest: drawtext = '| ' +t
+            else: drawtext = t
+            tw = getApproximateFontStringWidth(drawtext) 
             oldrestspace = restspace
             restspace = restspace - tw
             if restspace>0:
@@ -284,28 +267,28 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
                 split = split.split(tw/oldrestspace, align = splitalign)
                 
             else:
-                #first split to end the last tab:
-                #print('restcut' , last_tw/oldrestspace)
-                #split = split.split(tw/oldrestspace, align = splitalign)
-                #print('end row last tab split', tw/oldrestspace)
-                oldrestspace = w - margin
-                restspace = w - margin- tw
-                
+                #split = split.split(.9999, align = splitalign)
+                #split.label(' ')
+                drawtext = t
+                tw = getApproximateFontStringWidth(drawtext) 
+                oldrestspace = baserest
+                restspace = baserest- tw
                 row = tabRow(layout)
                 split = row.split(tw/oldrestspace, align = splitalign)
-               
+                
             if id == active:
-                op = split.operator(operator_name, text=t , emboss = prefs.emboss)
+                op = split.operator(operator_name, text=drawtext , emboss = prefs.emboss)
             else:
-                op = split.operator(operator_name, text=t , emboss = not prefs.emboss)
+                op = split.operator(operator_name, text=drawtext , emboss = not prefs.emboss)
             oplist.append(op)
     else:# simple layout
         wtabcount = math.floor(w/80)
         if wtabcount == 0:
             wtabcount = 1
         ti = 0
-            
+        #layout.alignment = 'LEFT'
         row=tabRow(layout)
+        #row.alignment = 'LEFT'
         for t,id in zip(texts,ids):
             if id == active:
                 op = row.operator(operator_name, text=t , emboss = prefs.emboss)
@@ -342,7 +325,7 @@ def getApproximateFontStringWidth(st):
         elif s in 'BSPEAKVXY&UwNRCHD': size += 112
         elif s in 'QGOMm%W@': size += 135
         else: size += 50
-    return size * 6 *15 / 1000.0 # Convert to picas 
+    return size * 6 *16 / 1000.0 # Convert to picas 
  
 def drawTabs(self,context,plist, tabID):
     
@@ -415,18 +398,20 @@ def drawTabs(self,context,plist, tabID):
     
     
     if len(categories)>0: #EVIL TOOL PANELS!       
-        row=tabRow(maincol)
+        #row=tabRow(maincol)
         catops = tabsLayout(maincol, context, 'wm.activate_category',sorted_categories, sorted_categories, active_category)
         for cat, cname in zip(catops, sorted_categories):
             cat.category=cname
             cat.tabpanel_id=tabID
            
         plist = categories[active_category]
+        if not prefs.box: maincol.separator()
     
     if len(plist)>1:#property windows
         texts = []
         ids=[]
         tabpanels = []
+        #row=tabRow(maincol)
         for p in plist:
             if p.bl_label == 'Preview':
                 preview = p
@@ -448,6 +433,8 @@ def drawTabs(self,context,plist, tabID):
         #print(dir(self))
         self.text = p.bl_label
         layout.label(p.bl_label)
+        if hasattr(p,'category'):
+            self.category = p.category
         p.draw(self, context)
     layout.active = True
     if preview != None:
@@ -1102,7 +1089,7 @@ class VIEW3D_PT_Transform(bpy.types.Panel):
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
-    variable_width = bpy.props.BoolProperty(name = 'Tabs width by name length', default=False)
+    fixed_width = bpy.props.BoolProperty(name = 'Grid layout', default=True)
     emboss = bpy.props.BoolProperty(name = 'Invert way how tabs are drawn(emboss)', default=False)
     #align_rows = bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
     box = bpy.props.BoolProperty(name = 'Use box layout', default=False)
@@ -1111,7 +1098,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
     # here you specify how they are drawn
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "variable_width")
+        layout.prop(self, "fixed_width")
         layout.prop(self, "emboss")
         #layout.prop(self, "align_rows")
         layout.prop(self, "box")

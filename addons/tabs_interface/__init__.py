@@ -11,7 +11,7 @@ bl_info = {
     "tracker_url": "",
     "category": "All"}
 
-import bpy,os, math
+import bpy,os, math, string
 
 import bpy, bpy_types
 from bpy.app.handlers import persistent
@@ -74,18 +74,16 @@ class panelData(bpy.types.PropertyGroup):
 	
 def getWTabProps(context):
     w = context.region.width
-    wtabcount = math.floor(w/110)
+    wtabcount = math.floor(w/80)
     if wtabcount == 0:
         wtabcount = 1
-        
-    variable_width = bpy.context.user_preferences.addons["tabs_interface"].preferences.variable_width
     
     wlettercount = math.floor((w-14)/7)
     if wlettercount <= 0:
         wlettercount = 1
     
     
-    return variable_width, wtabcount, wlettercount
+    return wtabcount, wlettercount
     
     
     
@@ -243,15 +241,84 @@ class CarryLayout:
 def drawNone(self,context):
     pass;
 
-def tabRow(layout, variable_width):
-    tab_scale = 0.8
-    row = layout.row(align = True)
+def tabRow(layout):
+    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    
+    tab_scale = 0.9
+    
+    
+    row = layout.row(align = not prefs.variable_width)
     row.scale_y=tab_scale
-    #row.scale_x =.1
-    if variable_width:
+    if prefs.variable_width:
         row.alignment = 'LEFT'
     return row
- 
+    
+def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [], active = ''): 
+    w = context.region.width
+    
+    
+    
+        
+    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    w = context.region.width
+    margin = 5
+    oplist = []
+    if prefs.box:
+        layout = layout.box()
+    layout = layout.column(align = True)
+    
+    if prefs.variable_width:
+        
+        restspace = w - margin
+        tw = 0
+        splitalign = True
+        row = tabRow(layout)
+        split=row
+        for t,id in zip(texts,ids):
+            last_tw = tw
+            tw = getApproximateFontStringWidth(t) 
+            oldrestspace = restspace
+            restspace = restspace - tw
+            if restspace>0:
+                
+                split = split.split(tw/oldrestspace, align = splitalign)
+                
+            else:
+                #first split to end the last tab:
+                #print('restcut' , last_tw/oldrestspace)
+                #split = split.split(tw/oldrestspace, align = splitalign)
+                #print('end row last tab split', tw/oldrestspace)
+                oldrestspace = w - margin
+                restspace = w - margin- tw
+                
+                row = tabRow(layout)
+                split = row.split(tw/oldrestspace, align = splitalign)
+               
+            if id == active:
+                op = split.operator(operator_name, text=t , emboss = prefs.emboss)
+            else:
+                op = split.operator(operator_name, text=t , emboss = not prefs.emboss)
+            oplist.append(op)
+    else:# simple layout
+        wtabcount = math.floor(w/80)
+        if wtabcount == 0:
+            wtabcount = 1
+        ti = 0
+            
+        row=tabRow(layout)
+        for t,id in zip(texts,ids):
+            if id == active:
+                op = row.operator(operator_name, text=t , emboss = prefs.emboss)
+            else:
+                op = row.operator(operator_name, text=t , emboss = not prefs.emboss)
+            oplist.append(op)
+            ti+=1
+            if ti == wtabcount:
+                ti = 0
+                row=tabRow(layout)
+    return oplist
+       
+       
 def drawUpDown(self, context, tabID):
     layout = self.layout
     s = bpy.context.scene
@@ -264,18 +331,35 @@ def drawUpDown(self, context, tabID):
     op.panel_id=active_tab
     op.tabpanel_id=tabID
  
+def getApproximateFontStringWidth(st):
+    size = 0 # in milinches
+    for s in st:
+        if s in 'lij|\' ': size += 37
+        elif s in '![]fI.,:;/\\t': size += 50
+        elif s in '`-(){}r"': size += 60
+        elif s in '*^zcsJkvxy': size += 85
+        elif s in 'aebdhnopqug#$L+<>=?_~FZT' + string.digits: size += 95
+        elif s in 'BSPEAKVXY&UwNRCHD': size += 112
+        elif s in 'QGOMm%W@': size += 135
+        else: size += 50
+    return size * 6 *15 / 1000.0 # Convert to picas 
+ 
 def drawTabs(self,context,plist, tabID):
-    variable_width, wtabcount, wlettercount = getWTabProps(context)
     
+    #
+   
+    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     
     s = bpy.context.scene
     tabpanel_data = s.panelTabData.get(tabID)
     if tabpanel_data == None:
         return []
         
-    if bpy.context.user_preferences.addons["tabs_interface"].preferences.reorder_panels:
-    
+    if prefs.reorder_panels:
         drawUpDown(self, context, tabID)
+    emboss = prefs.emboss
+    
+    
     draw_panels = []    
     categories={}
     categories_list = []#this because it can be sorted, not like dict.
@@ -316,7 +400,7 @@ def drawTabs(self,context,plist, tabID):
             if c == active_category:
                 hasactivecategory = True
         
-        if not hasactivecategory and len(categories)>0:
+        if not hasactivecategory:
             
             active_category = categories_list[0]
     
@@ -324,177 +408,41 @@ def drawTabs(self,context,plist, tabID):
     #    tabpanel_data.active_tab = plist[0].realID
     #print(wtabcount)
     
-    ti = 0
-    totalwidth = 0
+    
     preview= None
     layout = self.layout
-   
+    maincol = layout.column(align = True)
     
-    if len(plist)>1 and len(categories)==0:#property windows
-        #box = layout.box()
-        col = layout.column(align = True)
-        
-        #col.scale_y=.5
-        #col.alignment = 'LEFT'
-        row=tabRow(col, variable_width)
-        for p in plist:
-                
-            if p.bl_label!='Preview':
-                #col1=row.column(align = True)
-               # print(self.activetab , p.realID, p.bl_label, p.bl_context)
-                #print(dir(p))
-                totalwidth+= len(p.bl_label) + 2
-                if (variable_width and totalwidth>wlettercount):#we have to make a new row BEFORE it overflows.
-                    totalwidth = len(p.bl_label) + 2
-                    row=tabRow(col, variable_width)
-                if tabpanel_data.active_tab == p.realID:#p.realID:
-                    if p not in _pinned_panels:
-                        draw_panels.append(p)
-
-                    op = row.operator("wm.activate_panel", text=p.bl_label , emboss = False)
-                    
-                else:
-                    op = row.operator("wm.activate_panel", text=p.bl_label , emboss = True )
-                op.panel_id=p.realID
-                op.tabpanel_id=tabID
-                
-                ti+=1
-                if (not variable_width and ti == wtabcount):
-                    ti = 0
-                   
-                    
-                    
-            else:
-                preview = p
-        if not variable_width:
-            for i in range(ti,wtabcount):
-                col1=row.column(align = True)
-    elif len(categories)>0: #EVIL TOOL PANELS!
-        
-        bpy.types.VIEW3D_MT_editor_menus.draw_collapsible(context, layout)
-        #box = layout.box()
-        col = layout.column(align = True)
-        
-        cnames = sorted_categories
-        #cnames.sort()
-        #print(sorted_categories)
-        prepend = ''
-        icon = 'NONE'
-        row=tabRow(col, variable_width)
-        ti = 0
-        for cname in cnames:
-            category = categories[cname]
-            
-            totalwidth+= len(cname) + 2
-            if (variable_width and totalwidth>wlettercount):#we have to make a new row BEFORE it overflows.
-                totalwidth = len(cname) + 2
-                row=tabRow(col, variable_width)    
+    
+    if len(categories)>0: #EVIL TOOL PANELS!       
+        row=tabRow(maincol)
+        catops = tabsLayout(maincol, context, 'wm.activate_category',sorted_categories, sorted_categories, active_category)
+        for cat, cname in zip(catops, sorted_categories):
+            cat.category=cname
+            cat.tabpanel_id=tabID
            
-            if cname == active_category:#p.realID:
-                
-
-                op = row.operator("wm.activate_category", text=cname , emboss = False)
-                
+        plist = categories[active_category]
+    
+    if len(plist)>1:#property windows
+        texts = []
+        ids=[]
+        tabpanels = []
+        for p in plist:
+            if p.bl_label == 'Preview':
+                preview = p
             else:
-                op = row.operator("wm.activate_category", text=cname , emboss = True )
-            op.category=cname
+                if p.realID == active_tab and p not in _pinned_panels:
+                    draw_panels.append(p)
+                texts.append(p.bl_label)
+                ids.append(p.realID)
+                tabpanels.append(p)
+                
+        tabops = tabsLayout(maincol, context,  'wm.activate_panel', texts, ids, active_tab)   
+        for op,p in zip(tabops, tabpanels):
+            op.panel_id=p.realID
             op.tabpanel_id=tabID
-                
-                
-            
-            ti+=1
-            if (not variable_width and ti >= wtabcount):
-                ti = 0
-                row=tabRow(col, variable_width)   
-        category = categories[active_category]
         
-        ti = 0
-        totalwidth = 0
-        if len(category)>1:
-            col = layout.column(align = True)
-            #col.separator()
-            row=tabRow(col, variable_width) 
-            for p in category:
-                if p.bl_label!='Preview':
-                    totalwidth+= len(p.bl_label) + 2
-                    if (variable_width and totalwidth>wlettercount):#we have to make a new row BEFORE it overflows.
-                        totalwidth = len(p.bl_label) + 2
-                        row=tabRow(col, variable_width)
-                    
-                    if tabpanel_data.active_tab == p.realID:
-                        if p not in _pinned_panels:
-                            draw_panels.append(p)
-                        op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = False, icon = icon)
-                    else:
-                        op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = True , icon = icon)
-                    op.panel_id=p.realID
-                    op.tabpanel_id=tabID
-                    ti+=1
-                    if (not variable_width and ti == wtabcount):
-                        row=tabRow(col, variable_width)
-                        ti = 0
-                        
-                    
-                else:
-                    preview = p  
-                icon = 'NONE'
-                prepend = ''
-        else:
-            p = category[0]
-            if p not in _pinned_panels:
-                draw_panels.append(p)
-            
-            '''
-            box = col
-            #box =col.box()
-            #box.scale_y = 0.9
-            row=tabRow(box, variable_width)
-            #sep = col.separator()
-            #icon = 'RIGHTARROW'
-            if len(category)>1:
-                #col = layout.column(align = True)
-                ti=1
                 
-                #row.scale_y = 0.5
-                row.label('-'+cname+'-', icon = icon)#, icon = 'ANTIALIASED'
-                totalwidth+= len(cname)
-               # row=tabRow(box, variable_width)
-               
-                #prepend = cname+ '>>'
-                #icon = 'ANTIALIASED'
-                #icon = 'NONE'
-            else:
-                #col = layout.column(align = True)
-                ti+=1
-                row.label('-'+cname+'-', icon = icon)
-                totalwidth+= len(cname)
-                #prepend = cname+' >> '
-                #icon = 'ANTIALIASED'
-                #col = layout.column(align = True)
-            #row = col.row(align = True)
-            #icon = 'NONE'
-            for p in category:
-                if p.bl_label!='Preview':
-                    totalwidth+= len(p.bl_label)
-                    if tabpanel_data.active_tab == p.realID:
-                        if p not in _pinned_panels:
-                            draw_panels.append(p)
-                        op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = False, icon = icon)
-                    else:
-                        op = row.operator("wm.activate_panel", text=prepend + p.bl_label , emboss = True , icon = icon)
-                    op.panel_id=p.realID
-                    op.tabpanel_id=tabID
-                    ti+=1
-                    if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
-                        row=tabRow(col, variable_width)
-                        ti = 0
-                        totalwidth = 0
-                    
-                else:
-                    preview = p  
-                icon = 'NONE'
-                prepend = ''
-                #'''
     elif len(plist)==1:
         p = plist[0]
         #print(dir(self))
@@ -508,50 +456,32 @@ def drawTabs(self,context,plist, tabID):
 
 
 def modifiersDraw(self, context):
-    variable_width, wtabcount, wlettercount = getWTabProps(context)
-        
-    layout = self.layout
-
     ob = context.object
+    layout = self.layout
     layout.operator_menu_enum("object.modifier_add", "type")
-    
-    ti = 0
-    totalwidth = 0
     if len(ob.modifiers)>0:
-       
-        col = layout.column(align = True)
-        row = tabRow(col, variable_width)
+        maincol = layout.column(align = True)
+        
         active_modifier = ob.active_modifier
         if not ob.active_modifier in ob.modifiers:
             active_modifier = ob.modifiers[0].name
         if len(ob.modifiers)>1:
-            for md in ob.modifiers:
-                totalwidth+= len(md.name)
-                if md.name==active_modifier:
-                    op = row.operator("object.activate_modifier", text=md.name, emboss = False).modifier_name = md.name
-                else:
-                    op = row.operator("object.activate_modifier", text=md.name, emboss = True).modifier_name = md.name
-                ti+=1
-                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
-                    ti = 0
-                    totalwidth = 0
-                    row=tabRow(col, variable_width)
-                
-        
+            names = ob.modifiers.keys()
+            tabops= tabsLayout(maincol, context,  'object.activate_modifier', names, names, active_modifier)   
+            for op, mname in zip(tabops,names):
+                op.modifier_name = mname
         md = ob.modifiers[active_modifier]
         box = layout.template_modifier(md)
         if box:
             # match enum type to our functions, avoids a lookup table.
             getattr(self, md.type)(box, ob, md)
 
+            
 def constraintsDraw(self, context):
-    variable_width, wtabcount, wlettercount = getWTabProps(context)
-    
-
-    layout = self.layout
 
     ob = context.object
 
+    layout = self.layout
     if ob.type == 'ARMATURE' and ob.mode == 'POSE':
         box = layout.box()
         box.alert = True  # XXX: this should apply to the box background
@@ -560,68 +490,46 @@ def constraintsDraw(self, context):
                      text="Go to Bone Constraints tab...").context = 'BONE_CONSTRAINT'
     else:
         layout.operator_menu_enum("object.constraint_add", "type", text="Add Object Constraint")
-    
-    ti = 0
-    totalwidth = 0
-    
     if len(ob.constraints)>0:
-        col = layout.column(align = True)
-        row = tabRow(col, variable_width)
-        i=0
+        maincol = layout.column(align = True)
+        
         active_constraint = ob.active_constraint
         if not ob.active_constraint in ob.constraints:
             active_constraint = ob.constraints[0].name
         if len(ob.constraints)>1:
-            for con in ob.constraints:
-                totalwidth += len(con.name)
-                if con.name==active_constraint:
-                    op = row.operator("object.activate_constraint", text=con.name, emboss = False)
-                else:
-                    op = row.operator("object.activate_constraint", text=con.name, emboss = True)
-                op.constraint_name = con.name
-                ti+=1
-                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
-                    ti = 0
-                    totalwidth = 0
-                    row=tabRow(col, variable_width)
-                
+            names = ob.constraints.keys()
+            tabops= tabsLayout(maincol, context,  'object.activate_constraint', names, names, active_constraint)  
+            for op, cname in zip(tabops, names):   
+                op.constraint_name = cname
         con = ob.constraints[active_constraint]
         self.draw_constraint(context, con)    
        
       
 def boneConstraintsDraw(self, context):
-    variable_width, wtabcount, wlettercount = getWTabProps(context)
-    layout = self.layout
-
-    layout.operator_menu_enum("pose.constraint_add", "type", text="Add Bone Constraint")
     pb = context.pose_bone
+    layout = self.layout
+    layout.operator_menu_enum("pose.constraint_add", "type", text="Add Bone Constraint")
     
-    ti = 0
-    totalwidth = 0
+
     if len(pb.constraints)>0:
-    
-        col = layout.column(align = True)
-        row = col.row(align = True)
-        
+        maincol = layout.column(align = True)
         active_constraint = pb.active_constraint
         if not pb.active_constraint in pb.constraints:
             active_constraint = pb.constraints[0].name
         if len(pb.constraints)>1:
-            for con in pb.constraints:
-                totalwidth += con.name
-                if con.name==active_constraint:
-                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = False)
-                else:
-                    op = row.operator("object.activate_posebone_constraint", text=con.name, emboss = True)
-                op.constraint_name = con.name
-                ti+=1
-                if (not variable_width and ti == wtabcount) or (variable_width and totalwidth>wlettercount):
-                    ti = 0
-                    totalwidth = 0
-                    row=tabRow(col, variable_width)
-                
+            maincol = layout.column(align = True)
+        
+            active_constraint = pb.active_constraint
+            if not pb.active_constraint in pb.constraints:
+                active_constraint = pb.constraints[0].name
+            if len(pb.constraints)>1:
+                names = pb.constraints.keys()
+                tabops= tabsLayout(maincol, context,  'object.activate_posebone_constraint', names, names, active_constraint)  
+                for op, cname in zip(tabops, names):   
+                    op.constraint_name = cname
         con = pb.constraints[active_constraint]
         self.draw_constraint(context, con)    
+            
     
 def drawPanels(self, context, draw_panels):
     layout = self.layout
@@ -888,6 +796,7 @@ class PanelDown(bpy.types.Operator):
                         if not swapped:
                             region[i] = region[i+1]
                             region[i+1] = p
+                            break;
                     
         return {'FINISHED'} 
  
@@ -1193,13 +1102,19 @@ class VIEW3D_PT_Transform(bpy.types.Panel):
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
-    variable_width = bpy.props.BoolProperty(name = 'Tabs width by name length', default=True)
-    reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels', default=False)
+    variable_width = bpy.props.BoolProperty(name = 'Tabs width by name length', default=False)
+    emboss = bpy.props.BoolProperty(name = 'Invert way how tabs are drawn(emboss)', default=False)
+    #align_rows = bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
+    box = bpy.props.BoolProperty(name = 'Use box layout', default=False)
+    reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels (developer tool only)', default=False)
 
     # here you specify how they are drawn
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "variable_width")
+        layout.prop(self, "emboss")
+        #layout.prop(self, "align_rows")
+        layout.prop(self, "box")
         layout.prop(self, "reorder_panels")
     
     

@@ -407,6 +407,8 @@ def drawTabs(self,context,plist, tabID):
         plist = categories[active_category]
         if not prefs.box: maincol.separator()
     
+    
+                
     if len(plist)>1:#property windows
         texts = []
         ids=[]
@@ -426,16 +428,13 @@ def drawTabs(self,context,plist, tabID):
         for op,p in zip(tabops, tabpanels):
             op.panel_id=p.realID
             op.tabpanel_id=tabID
-        
-                
-    elif len(plist)==1:
+    else:
         p = plist[0]
-        #print(dir(self))
-        self.text = p.bl_label
-        layout.label(p.bl_label)
-        if hasattr(p,'category'):
+        if hasattr(p,'category'):# Node editor
             self.category = p.category
-        p.draw(self, context)
+        if p not in _pinned_panels:
+            draw_panels.append(plist[0])
+    
     layout.active = True
     if preview != None:
         preview.draw(self, context)

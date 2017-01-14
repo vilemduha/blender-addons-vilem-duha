@@ -16,12 +16,13 @@ import bpy,os, math, string
 import bpy, bpy_types
 from bpy.app.handlers import persistent
 from tabs_interface.panel_order import spaces
+from tabs_interface import panel_order 
 
 _hidden_panels = {}
 _panels = {}
 _context_items = []
 _bl_panel_types = []
-_pinned_panels = []
+#_pinned_panels = []
 _tab_panels = {}
 def hide_panel(tp_name):
     if tp_name in _hidden_panels:
@@ -57,12 +58,14 @@ class tabSetups(bpy.types.PropertyGroup):
 
 def updatePin(self, context) :
     #print(self.name, ' update pin')
-    p=bpy.types.Scene.panelIDs[self.name]
+    pname = self.name
+    s = bpy.context.scene
     if self.pin:
-        if p not in _pinned_panels:
-            _pinned_panels.append(p)
-    elif p in _pinned_panels:
-        _pinned_panels.remove(p)
+        if pname not in s.pinned_panels:
+            litem = s.pinned_panels.add()
+            litem.name = pname
+    elif pname in s.pinned_panels:
+        s.pinned_panels.remove(s.pinned_panels.find(pname))
             
 
 class panelData(bpy.types.PropertyGroup):
@@ -88,8 +91,8 @@ def getPanelIDs():
             if tp == panel_tp or not issubclass(tp, panel_tp):
                 continue
                 
-            if (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
-                print(tp.bl_rna.identifier)
+            #if (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
+                #print(tp.bl_rna.identifier)
             if not (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
                 panelIDs[tp.bl_rna.identifier] = tp
                 if tp.is_registered!=True:
@@ -221,12 +224,8 @@ def drawNone(self,context):
 
 def tabRow(layout):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
-    
-    tab_scale = 0.9
-    
-    
     row = layout.row(align = prefs.fixed_width)
-    row.scale_y=tab_scale
+    row.scale_y=prefs.scale_y
     if not prefs.fixed_width:
         row.alignment = 'LEFT'
     return row
@@ -327,6 +326,15 @@ def getApproximateFontStringWidth(st):
         else: size += 50
     return size * 6 *16 / 1000.0 # Convert to picas 
  
+def mySeparator(layout):
+    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    
+    if not prefs.box:
+        layout.separator()
+    if prefs.emboss and not prefs.box:
+        b=layout.box()
+        b.scale_y=0.0
+ 
 def drawTabs(self,context,plist, tabID):
     
     #
@@ -335,6 +343,7 @@ def drawTabs(self,context,plist, tabID):
     
     s = bpy.context.scene
     tabpanel_data = s.panelTabData.get(tabID)
+    
     if tabpanel_data == None:
         return []
         
@@ -353,10 +362,10 @@ def drawTabs(self,context,plist, tabID):
     hasactivecategory = False
     
     
-    for pp in _pinned_panels:
-        if pp in plist:
-        
-            draw_panels.append(pp)
+    for pdata in s.pinned_panels:
+        for p in plist:#this could be smartsr, avoid for loop?
+            if p.realID == pdata.name:
+                draw_panels.append(p)
     
     for p in plist:
         if hasattr(p,'bl_category'):
@@ -405,10 +414,13 @@ def drawTabs(self,context,plist, tabID):
             cat.tabpanel_id=tabID
            
         plist = categories[active_category]
-        if not prefs.box: maincol.separator()
+        if len(plist)>1:
+            mySeparator(maincol)
+            
+            
     
     
-                
+    #print('categories' , categories)           
     if len(plist)>1:#property windows
         texts = []
         ids=[]
@@ -418,7 +430,7 @@ def drawTabs(self,context,plist, tabID):
             if p.bl_label == 'Preview':
                 preview = p
             else:
-                if p.realID == active_tab and p not in _pinned_panels:
+                if p.realID == active_tab and p.realID not in s.pinned_panels:
                     draw_panels.append(p)
                 texts.append(p.bl_label)
                 ids.append(p.realID)
@@ -430,10 +442,11 @@ def drawTabs(self,context,plist, tabID):
             op.tabpanel_id=tabID
     else:
         p = plist[0]
+        #print(p.bl_label)
         if hasattr(p,'category'):# Node editor
             self.category = p.category
-        if p not in _pinned_panels:
-            draw_panels.append(plist[0])
+        if p.realID not in s.pinned_panels:
+            draw_panels.append(p)
     
     layout.active = True
     if preview != None:
@@ -456,6 +469,8 @@ def modifiersDraw(self, context):
             tabops= tabsLayout(maincol, context,  'object.activate_modifier', names, names, active_modifier)   
             for op, mname in zip(tabops,names):
                 op.modifier_name = mname
+                
+            mySeparator(maincol)
         md = ob.modifiers[active_modifier]
         box = layout.template_modifier(md)
         if box:
@@ -519,47 +534,26 @@ def boneConstraintsDraw(self, context):
     
 def drawPanels(self, context, draw_panels):
     layout = self.layout
+    #print(draw_panels)
     for drawPanel in draw_panels:
-        '''
-        tabpanel = self
-        p = drawPanel
-        for var in dir(p):
-            if var not in DEFAULT_PANEL_PROPS:
-                exec('tabpanel.'+var +' = p.' + var)
-        '''
-        #layout.separator()
-        #if len(drawPanels)>1 or hasattr(drawPanel, "draw_header"):
+        
         box = layout.box()
         box.scale_y =.8
-        # box = layout.column(align = True)#.box()
-        #box.scale_x = 0.2
-        #box.scale_y =.8
-        #print(layout.introspect())
+        
         row = box.row()
         row.scale_y=.8
         if hasattr(drawPanel, "draw_header"):
-            
-            #self.layout = row
             fakeself = CarryLayout(row)
             drawPanel.draw_header(fakeself,context)
-            #row.label('Enable ')
+            
         row.label(drawPanel.bl_label)
-        #for p in bpy.types.Scene.panelIDs:
-        
-        
         pd = bpy.context.scene.panelData[drawPanel.realID]
         if pd.pin: icon = 'PINNED'
         else: icon = 'UNPINNED'
         row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon)
-        #box = layout.box()
-        #box.scale_y =.01
-        #emptyrow = box.row()
         if hasattr(drawPanel, "draw"):
-            #self.layout = box
-            #col = layout.column()
-            #fakeself = CarryLayout(col)
+            
             drawPanel.draw(self,context)
-        #_pinned_panels
         layoutActive(self,context)
  
 def pollTabs(panels, context):
@@ -1092,6 +1086,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
     emboss = bpy.props.BoolProperty(name = 'Invert way how tabs are drawn(emboss)', default=False)
     #align_rows = bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
     box = bpy.props.BoolProperty(name = 'Use box layout', default=False)
+    scale_y = bpy.props.FloatProperty(name = 'vertical scale of tabs', default=1)
     reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels (developer tool only)', default=False)
 
     # here you specify how they are drawn
@@ -1101,6 +1096,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
         layout.prop(self, "emboss")
         #layout.prop(self, "align_rows")
         layout.prop(self, "box")
+        layout.prop(self, "scale_y")
         layout.prop(self, "reorder_panels")
     
     
@@ -1117,23 +1113,24 @@ def createSceneTabData():
             #bpy.context.scene.tabSpaces[]
             item = bpy.context.scene.panelData.add()
             item.name = p.realID  
-    print(_tab_panels)
+    #print(_tab_panels)
     if _tab_panels == {}:
         definitions, panelIDs = createPanels()
         for pname in panelIDs:
             pt = eval('bpy.types.'+pname)
             _tab_panels[pname] = pt    
     for pt in _tab_panels:
-        print(pt)
+        #print(pt)
         if s.panelTabData.get(pt) == None:
             item = bpy.context.scene.panelTabData.add()
             item.name = pt
     
 @persistent
 def scene_load_handler(scene):
+    s = bpy.context.scene
     #print('load handler')
     #if len(bpy.context.scene.panelData) == 0:
-    
+    #getPanels()
     if len(bpy.context.scene.panelTabData) == 0:
         createSceneTabData()
         #print (bpy.context.scene.panelData)
@@ -1197,6 +1194,7 @@ def register():
     bpy.types.PoseBone.active_constraint = bpy.props.StringProperty(name = 'active constraint', default = '')
     bpy.types.Scene.panelTabData = bpy.props.CollectionProperty(type=tabSetups)
     bpy.types.Scene.panelData = bpy.props.CollectionProperty(type=panelData)
+    bpy.types.Scene.pinned_panels = bpy.props.CollectionProperty(type=panelData)
     bpy.app.handlers.load_post.append(scene_load_handler)
     bpy.app.handlers.scene_update_pre.append(scene_load_handler)
     

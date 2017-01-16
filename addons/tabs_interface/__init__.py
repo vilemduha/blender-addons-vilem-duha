@@ -258,7 +258,7 @@ def tabRow(layout):
         row.alignment = 'LEFT'
     return row
     
-def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [], active = ''): 
+def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [],  active = ''): 
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
 
     w = context.region.width
@@ -267,7 +267,11 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
     if prefs.box:
         layout = layout.box()
     layout = layout.column(align = True)
-    
+    '''
+    if icons == []:
+        for t in texts:
+            icons.append('NONE')
+    '''
     if not prefs.fixed_width:# variable width layout <3
         baserest = w - margin
         restspace = baserest
@@ -317,9 +321,9 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
         row=tabRow(layout)
         for t,id in zip(texts,ids):
             if id == active:
-                op = row.operator(operator_name, text=t , emboss = prefs.emboss)
+                op = row.operator(operator_name, text=t , icon = 'NONE', emboss = prefs.emboss)
             else:
-                op = row.operator(operator_name, text=t , emboss = not prefs.emboss)
+                op = row.operator(operator_name, text=t , icon = 'NONE', emboss = not prefs.emboss)
             oplist.append(op)
             ti+=1
             if ti == wtabcount:
@@ -458,7 +462,7 @@ def drawTabs(self,context,plist, tabID):
             active_tab = category_active_tab
             hasactivetab = True
     
-     if not hasactivetab and len(plist)>0:
+    if not hasactivetab and len(plist)>0:
         activetab = plist[0].realID
     #print('categories' , categories)  
    

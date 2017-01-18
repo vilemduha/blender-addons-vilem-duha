@@ -160,7 +160,8 @@ def processPanelForTabs(panel):
     if not hasattr(panel, 'realID' ):
         panel.realID = panel.bl_rna.identifier
         if hasattr(panel, 'bl_category'):
-            
+            #if panel.bl_category == 'Archimesh':
+                #print ('ARCHISHIT')
             if not hasattr(panel, 'orig_category'):
                 panel.orig_category = panel.bl_category
             panel.bl_category = 'Tools'
@@ -266,16 +267,20 @@ def drawNone(self,context):
 
 def tabRow(layout):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
-    row = layout.row(align = prefs.fixed_width)
+    row = layout.row(align = True)# not prefs.fixed_width)
     row.scale_y=prefs.scale_y
     if not prefs.fixed_width:
         row.alignment = 'LEFT'
     return row
     
-def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [], tdata = [],  active = '', enable_hiding = False): #tdata=[],
+def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [], tdata = [],  active = '', enable_hiding = False): #tdata=[],
+    '''Creates and draws actual layout of tabs'''
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     w = context.region.width
-    margin = 20
+    margin = 50 
+    if prefs.box:
+        margin +=5
+    iconwidth = 25
     oplist = []
     if prefs.box:
         layout = layout.box()
@@ -294,12 +299,22 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
         splitalign = True
         row = tabRow(layout)
         split=row
-        
+        rows = 0
+        i=0
         for t,id in zip(texts,ids):
             last_tw = tw
-            if prefs.emboss and restspace != baserest: drawtext = '| ' +t
-            else: drawtext = t
-            tw = getApproximateFontStringWidth(drawtext) 
+            if prefs.emboss and restspace != baserest: 
+                drawtext = '| ' +t
+            else:
+                drawtext = t
+            tw = getApproximateFontStringWidth(drawtext)
+            if enable_hiding and prefs.hiding: tw += iconwidth
+            #print(context.space_data.type)
+            #print(context.region.type)
+            #print(dir(context))
+            if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
+                tw += 20
+            
             oldrestspace = restspace
             restspace = restspace - tw
             if restspace>0:
@@ -309,17 +324,32 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
             else:
                 drawtext = t
                 tw = getApproximateFontStringWidth(drawtext) 
+                if rows ==0 and enable_hiding: #draw hiding mode icon here
+                    if oldrestspace>iconwidth:
+                        split = split.split((oldrestspace - iconwidth)/oldrestspace, align = False)
+                        #split = split.split()
+                    row.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')
+                    if prefs.hiding:
+                        tw += iconwidth
+                if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
+                    tw += 20 #  tw +=15
+                rows+=1
                 oldrestspace = baserest
                 restspace = baserest- tw
                 row = tabRow(layout)
                 split = row.split(tw/oldrestspace, align = splitalign)
             #s1 = split.split(0.2, align = splitalign)
-            #s1.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')    
-            if id == active:
-                op = split.operator(operator_name, text=drawtext , emboss = prefs.emboss)
+            #s1.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')   
+            if enable_hiding and prefs.hiding:
+                split.prop(tdata[i], 'show', text = drawtext)
+                oplist.append(None)
             else:
-                op = split.operator(operator_name, text=drawtext , emboss = not prefs.emboss)
-            oplist.append(op)
+                if id == active:
+                    op = split.operator(operator_name, text=drawtext , emboss = prefs.emboss)
+                else:
+                    op = split.operator(operator_name, text=drawtext , emboss = not prefs.emboss)
+                oplist.append(op)
+            i+=1    
             #
     else:# GRID  layout
         wtabcount = math.floor(w/80)
@@ -348,9 +378,12 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
                 splitratio = 1/(wtabcount-ti)
                 if enable_hiding:
                     if splitratio == 1 and rows == 0:
-                        splitratio = 1-(25/(w-margin))*wtabcount
-                #print(splitratio)
-                split = row.split(splitratio)
+                        splitratio = 1-(iconwidth/(w-margin))*wtabcount
+                if splitratio == 1:
+                    use = row
+                else:
+                    split = row.split(splitratio, align = True)
+                    use = split
                 drawn = False
                 if enable_hiding and prefs.hiding:
                     split.prop(tdata[i], 'show', text = t)
@@ -364,13 +397,11 @@ def tabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [],
                             op = split.operator(operator_name, text=t , icon = 'NONE', emboss = not prefs.emboss)
                         oplist.append(op)
                         drawn = True
-                #if prefs.hiding:
-                 #   split.alignment =='RIGHT'
-                 #   split.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')
-                #if drawn:
-                row = split.split()
-                ti+=1
                 
+                row = split.split(align = True)
+                ti+=1
+            else:
+                oplist.append(None)
             i+=1
             if ti == wtabcount:
                 ti = 0
@@ -402,17 +433,19 @@ def drawUpDown(self, context, tabID):
     op.tabpanel_id=tabID
  
 def getApproximateFontStringWidth(st):
-    size = 0 # in milinches
+    size = 0
     for s in st:
-        if s in 'lij|\' ': size += 37
-        elif s in '![]fI.,:;/\\t': size += 50
-        elif s in '`-(){}r"': size += 60
-        elif s in '*^zcsJkvxy': size += 85
-        elif s in 'aebdhnopqug#$L+<>=?_~FZT' + string.digits: size += 95
-        elif s in 'BSPEAKVXY&UwNRCHD': size += 112
-        elif s in 'QGOMm%W@': size += 135
-        else: size += 50
-    return size * 6 *16 / 1000.0 # Convert to picas 
+        if s in 'i|': size+=2
+        elif s in ' ': size+=4
+        elif s in 'sfrt': size+=5
+        elif s in 'ceghkou': size+=6
+        elif s in 'PadnBCST3E': size+=7
+        elif s in 'GMODVXYZ': size+=8
+        elif s in 'w': size+=9
+        elif s in 'm': size+=10
+        else: size += 7
+    #print(size)
+    return size # Convert to picas 
  
 def mySeparator(layout):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
@@ -504,10 +537,11 @@ def drawTabs(self,context,plist, tabID):
     
     if len(categories)>0: #EVIL TOOL PANELS!       
         #row=tabRow(maincol)
-        catops = tabsLayout(maincol, context, operator_name = 'wm.activate_category', texts = sorted_categories, ids = sorted_categories, tdata = cdata,  active = active_category, enable_hiding = True)
+        catops = drawTabsLayout(maincol, context, operator_name = 'wm.activate_category', texts = sorted_categories, ids = sorted_categories, tdata = cdata,  active = active_category, enable_hiding = True)
         for cat, cname in zip(catops, sorted_categories):
-            cat.category=cname
-            cat.tabpanel_id=tabID
+            if cat!=None:
+                cat.category=cname
+                cat.tabpanel_id=tabID
            
         plist = categories[active_category]
         if len(plist)>1:
@@ -541,11 +575,12 @@ def drawTabs(self,context,plist, tabID):
                 tabpanels.append(p)
                 tdata.append(panel_data[p.realID])
         #print(texts)       
-        tabops = tabsLayout(maincol, context, operator_name ='wm.activate_panel', texts = texts, ids = ids, tdata = tdata, active = active_tab, enable_hiding = True)   
+        tabops = drawTabsLayout(maincol, context, operator_name ='wm.activate_panel', texts = texts, ids = ids, tdata = tdata, active = active_tab, enable_hiding = True)   
         for op,p in zip(tabops, tabpanels):
-            op.panel_id=p.realID
-            op.tabpanel_id=tabID
-            op.category=active_category
+            if op!=None:
+                op.panel_id=p.realID
+                op.tabpanel_id=tabID
+                op.category=active_category
     elif len(plist)==1:
         p = plist[0]
         #print(p.bl_label)
@@ -573,7 +608,7 @@ def modifiersDraw(self, context):
         if len(ob.modifiers)>1:
             names = ob.modifiers.keys()
             
-            tabops= tabsLayout(maincol, context,  operator_name = 'object.activate_modifier', texts = names, ids = names, active = active_modifier)   
+            tabops= drawTabsLayout(maincol, context,  operator_name = 'object.activate_modifier', texts = names, ids = names, active = active_modifier)   
             for op, mname in zip(tabops,names):
                 op.modifier_name = mname
                 
@@ -606,7 +641,7 @@ def constraintsDraw(self, context):
             active_constraint = ob.constraints[0].name
         if len(ob.constraints)>1:
             names = ob.constraints.keys()  
-            tabops= tabsLayout(maincol, context,  operator_name = 'object.activate_constraint', texts = names, ids = names, active = active_constraint)  
+            tabops= drawTabsLayout(maincol, context,  operator_name = 'object.activate_constraint', texts = names, ids = names, active = active_constraint)  
             for op, cname in zip(tabops, names):   
                 op.constraint_name = cname
         con = ob.constraints[active_constraint]
@@ -632,8 +667,8 @@ def boneConstraintsDraw(self, context):
                 active_constraint = pb.constraints[0].name
             if len(pb.constraints)>1:
                 names = pb.constraints.keys()
-                #tabops= tabsLayout(maincol, context,  operator_name = 'object.activate_constraint', texts = names, ids = names, active = active_constraint)  
-                tabops= tabsLayout(maincol, context,  operator_name = 'object.activate_posebone_constraint',texts =  names,ids =  names,active =  active_constraint)  
+                #tabops= drawTabsLayout(maincol, context,  operator_name = 'object.activate_constraint', texts = names, ids = names, active = active_constraint)  
+                tabops= drawTabsLayout(maincol, context,  operator_name = 'object.activate_posebone_constraint',texts =  names,ids =  names,active =  active_constraint)  
                 for op, cname in zip(tabops, names):   
                     op.constraint_name = cname
         con = pb.constraints[active_constraint]
@@ -771,7 +806,7 @@ def getFilteredTabs(self,context):
                     if not pctx == context.mode:
                         polled =False
                         pass
-                   # print((context.space_data.context))
+                   #print((context.space_data.context))
             if polled:
                 possible_tabs_wider.append(panel)
             if hasattr(panel, 'bl_category'): 
@@ -796,7 +831,7 @@ def drawRegionUI(self,context):#, getspace, getregion, tabID):
     tabID = self.bl_idname
     
     draw_tabs_list = getFilteredTabs(self,context)
-   # print('pre',self.tabcount)
+    #print('pre',self.tabcount)
     #print('filtered',len(draw_tabs_list))   
     draw_panels = drawTabs(self, context, draw_tabs_list, tabID)       
     drawPanels(self, context, draw_panels)
@@ -822,7 +857,7 @@ class PanelUp(bpy.types.Operator):
    
         ps = bpy.types.Scene.panelSpaces
        
-       # print('up1')
+        #print('up1')
         for s in ps:
             space = ps[s]
             
@@ -1268,11 +1303,14 @@ def createSceneTabData():
             item.name = p.realID  
             item.space = p.bl_space_type
             #print('space update in creatabpaneldata', item.space)
-        if hasattr(p, 'orig_category'):
+        if hasattr(p, 'bl_category'):
             c = s.categories.get(p.orig_category)
             if c == None:
                 c = s.categories.add();
                 c.name = p.orig_category
+        #cs =s.categories.keys()
+        #cs.sort()
+        #print(cs)
             
     #print(_tab_panels)
     '''
@@ -1300,20 +1338,31 @@ def scene_load_handler(scene):
     if btypeslen!= s.get('bpy_types_len'):
         updatePanels()
     s['bpy_types_len'] = btypeslen
+    print(btypeslen)
     #if len(_update_tabs)>0:
     createSceneTabData()
     
             
 @persistent
 def scene_update_handler(scene):
-    if random.random()<0.01:# this should be replaced by better detecting if registrations might have changed.
+    s = bpy.context.scene
+    sc = s.get('tabs_update_counter')
+    first = False
+    if sc == None:
+        first = True
+        sc = s['tabs_update_counter'] = 0
+        
+    s['tabs_update_counter']+=1
+    if sc>200 or first:# this should be replaced by better detecting if registrations might have changed.
+        s['tabs_update_counter'] = 0
         t = time.time()
         s = bpy.context.scene
        
         btypeslen = len(dir(bpy.types))
-        if btypeslen!= s.get('bpy_types_len'):
+        if btypeslen!= s.get('bpy_types_len') or first:
             updatePanels()
         s['bpy_types_len'] = btypeslen
+        #print('updating', btypeslen)
         if len(_update_tabs)>0:
             createSceneTabData()
         
@@ -1336,6 +1385,7 @@ def object_select_handler(scene):
             s.active_previous = bpy.context.active_object.name
         
 
+        
 def register():
     
     bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
@@ -1389,7 +1439,7 @@ def register():
         bpy.utils.register_class(eval(pname))
         pt = eval('bpy.types.'+pname)
         _tab_panels[pname] = pt    
-        print(pname)
+        #print(pname)
     
      
     
@@ -1400,9 +1450,11 @@ def unregister():
         if hasattr(panel, 'bl_category'):
             if hasattr(panel, 'orig_category'):
                 panel.bl_category = panel.orig_category
+            
         unhide_panel(panel.realID)
         
     bpy.utils.unregister_class(VIEW3D_PT_Transform)
+    bpy.utils.unregister_class(VIEW3D_PT_transform)
     
     
     
@@ -1415,6 +1467,7 @@ def unregister():
         if hasattr(bpy.types, pname):
             bpy.utils.unregister_class(eval('bpy.types.'+pname))
     
+    bpy.utils.unregister_class(PanelUp)
     bpy.utils.unregister_class(PanelDown)
     bpy.utils.unregister_class(WritePanelOrder)
     bpy.utils.unregister_class(ActivatePanel)
@@ -1425,6 +1478,7 @@ def unregister():
     bpy.utils.unregister_class(ActivatePoseBoneConstraint)
     bpy.utils.unregister_class(tabSetups)
     bpy.utils.unregister_class(panelData)
+    bpy.utils.unregister_class(tabCategoryData)
     bpy.utils.unregister_class(TabInterfacePreferences)
     
 

@@ -267,8 +267,9 @@ def drawNone(self,context):
 
 def tabRow(layout):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
-    row = layout.row(align = True)# not prefs.fixed_width)
-    row.scale_y=prefs.scale_y
+    row = layout.row(align = prefs.fixed_width)# not prefs.fixed_width)
+    if not prefs.fixed_width:
+        row.scale_y=prefs.scale_y
     if not prefs.fixed_width:
         row.alignment = 'LEFT'
     return row
@@ -277,7 +278,7 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
     '''Creates and draws actual layout of tabs'''
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     w = context.region.width
-    margin = 50 
+    margin = 20 
     if prefs.box:
         margin +=5
     iconwidth = 25
@@ -313,7 +314,7 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
             #print(context.region.type)
             #print(dir(context))
             if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
-                tw += 20
+                tw += 10
             
             oldrestspace = restspace
             restspace = restspace - tw
@@ -328,11 +329,15 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
                     if oldrestspace>iconwidth:
                         split = split.split((oldrestspace - iconwidth)/oldrestspace, align = False)
                         #split = split.split()
-                    row.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')
+                    if prefs.hiding:
+                        icon = 'RESTRICT_VIEW_ON'
+                    else:
+                        icon = 'RESTRICT_VIEW_OFF'
+                    row.prop(prefs,'hiding' , icon_only = True, icon=icon, emboss = not prefs.emboss)
                     if prefs.hiding:
                         tw += iconwidth
                 if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
-                    tw += 20 #  tw +=15
+                    tw += 10 #  tw +=15
                 rows+=1
                 oldrestspace = baserest
                 restspace = baserest- tw
@@ -376,14 +381,12 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
         for t,id in zip(texts,ids):
             if (enable_hiding and prefs.hiding) or (not enable_hiding or tdata[i].show):
                 splitratio = 1/(wtabcount-ti)
-                if enable_hiding:
-                    if splitratio == 1 and rows == 0:
-                        splitratio = 1-(iconwidth/(w-margin))*wtabcount
-                if splitratio == 1:
-                    use = row
+                if splitratio == 1 and rows == 0:
+                    splitratio =  (1-(wtabcount * (iconwidth/((w-margin)))))
+                if splitratio ==1:
+                    split = row
                 else:
                     split = row.split(splitratio, align = True)
-                    use = split
                 drawn = False
                 if enable_hiding and prefs.hiding:
                     split.prop(tdata[i], 'show', text = t)
@@ -397,19 +400,24 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
                             op = split.operator(operator_name, text=t , icon = 'NONE', emboss = not prefs.emboss)
                         oplist.append(op)
                         drawn = True
-                
-                row = split.split(align = True)
+                if splitratio != 1:
+                    row = split.split(align = True)
                 ti+=1
             else:
                 oplist.append(None)
             i+=1
             if ti == wtabcount:
                 ti = 0
-                if enable_hiding:
-                    if rows == 0:
+                if enable_hiding and rows == 0:
                         #print('hide;')
-                        row.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')
-                    rows+=1
+                        #split = split.split(splitratio, align = True)
+                        #split = split.split(align = True)
+                        if prefs.hiding:
+                            icon = 'RESTRICT_VIEW_ON'
+                        else:
+                            icon = 'RESTRICT_VIEW_OFF'
+                        row.prop(prefs,'hiding' , icon_only = True, icon=icon , emboss = not prefs.emboss)
+                rows+=1
                 row=tabRow(layout)
             
         if ti!=0:
@@ -433,7 +441,7 @@ def drawUpDown(self, context, tabID):
     op.tabpanel_id=tabID
  
 def getApproximateFontStringWidth(st):
-    size = 0
+    size = 10
     for s in st:
         if s in 'i|': size+=2
         elif s in ' ': size+=4
@@ -445,7 +453,7 @@ def getApproximateFontStringWidth(st):
         elif s in 'm': size+=10
         else: size += 7
     #print(size)
-    return size # Convert to picas 
+    return size# Convert to picas 
  
 def mySeparator(layout):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
@@ -454,7 +462,7 @@ def mySeparator(layout):
         layout.separator()
     if prefs.emboss and not prefs.box:
         b=layout.box()
-        b.scale_y=0.0
+        b.scale_y=0
  
 def drawTabs(self,context,plist, tabID):
     space = context.space_data.type
@@ -684,10 +692,10 @@ def drawPanels(self, context, draw_panels):
                 exec('self.'+var +' = drawPanel.' + var)
                 
         box = layout.box()
-        box.scale_y =.8
+        box.scale_y =1
         
         row = box.row()
-        row.scale_y=.8
+        row.scale_y=.6
         if hasattr(drawPanel, "draw_header"):
             fakeself = CarryLayout(row)
             drawPanel.draw_header(fakeself,context)
@@ -696,7 +704,7 @@ def drawPanels(self, context, draw_panels):
         pd = bpy.context.scene.panelData[drawPanel.realID]
         if pd.pin: icon = 'PINNED'
         else: icon = 'UNPINNED'
-        row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon)
+        row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon, emboss = False)
         # these are various functions defined all around blender for panels. We need them to draw the panel inside the tab panel
         
         if hasattr(drawPanel, "draw"):
@@ -1261,30 +1269,32 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
     fixed_width = bpy.props.BoolProperty(name = 'Grid layout', default=True)
-    fixed_columns = bpy.props.BoolProperty(name = 'Fixed number of colums', default=False)
-    columns_properties = bpy.props.IntProperty(name = 'columns in property window', default=3)
-    columns_rest = bpy.props.IntProperty(name = 'columns in side panels', default=1)
-    emboss = bpy.props.BoolProperty(name = 'Invert way how tabs are drawn(emboss)', default=False)
+    fixed_columns = bpy.props.BoolProperty(name = 'Fixed number of colums', default=True)
+    columns_properties = bpy.props.IntProperty(name = 'Columns in property window', default=3)
+    columns_rest = bpy.props.IntProperty(name = 'Columns in side panels', default=2)
+    emboss = bpy.props.BoolProperty(name = 'Invert tabs drawing', default=True)
     #align_rows = bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
-    box = bpy.props.BoolProperty(name = 'Use box layout', default=False)
+    box = bpy.props.BoolProperty(name = 'Draw box around tabs', default=True)
     scale_y = bpy.props.FloatProperty(name = 'vertical scale of tabs', default=1)
     reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels (developer tool only)', default=False)
-    hiding = bpy.props.BoolProperty(name = 'Enable panel hiding hiding', description = 'switch to/from hiding mode', default=False)
+    hiding = bpy.props.BoolProperty(name = 'Enable panel hiding', description = 'switch to/from hiding mode', default=False)
     #hidden_panels = bpy.props.CollectionProperty(type = bpy.props.StringProperty)
     
     # here you specify how they are drawn
     def draw(self, context):
         layout = self.layout
+        layout.prop(self, "emboss")
+        layout.prop(self, "box")
+        
         layout.prop(self, "fixed_width")
         if self.fixed_width:
             layout.prop(self, "fixed_columns")
             if self.fixed_columns:
                 layout.prop(self, "columns_properties")
                 layout.prop(self, "columns_rest")
-        layout.prop(self, "emboss")
         #layout.prop(self, "align_rows")
-        layout.prop(self, "box")
-        layout.prop(self, "scale_y")
+        if not self.fixed_width:
+            layout.prop(self, "scale_y")
         layout.prop(self, "reorder_panels")
     
     

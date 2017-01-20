@@ -2,7 +2,7 @@
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
-    "version": (1, 0),
+    "version": (1, 1),
     "blender": (2, 78, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",
@@ -1109,7 +1109,7 @@ class ActivatePanel(bpy.types.Operator):
                 p = s.activated_panels[i]
                 if p.region == panel.bl_region_type and p.space == panel.bl_space_type:
                     deActivatePanel(p.name)
-                    print(p.name)
+                    #print(p.name)
        
         
         item.space = tabpanel.bl_space_type
@@ -1469,7 +1469,7 @@ def scene_load_handler(scene):
     if btypeslen!= s.get('bpy_types_len'):
         updatePanels()
     s['bpy_types_len'] = btypeslen
-    print(btypeslen)
+    #print(btypeslen)
     #if len(_update_tabs)>0:
     createSceneTabData()
     

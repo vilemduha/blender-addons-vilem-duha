@@ -1114,18 +1114,21 @@ class ActivatePanel(bpy.types.Operator):
         
         item.space = tabpanel.bl_space_type
         
-        if prefs.original_panels:
+        #if prefs.original_panels:
+        if self.shift and item.activated:
+            deActivatePanel(self.panel_id)
+        else:
             item.activated = True
-        if self.category!= '':
-            s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
-        
-        if self.panel_id not in s.activated_panels:
+            if self.category!= '':
+                s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
             
-            item = s.activated_panels.add()
-            item.space = panel.bl_space_type
-            item.region = panel.bl_region_type
-            item.name = self.panel_id
-            
+            if self.panel_id not in s.activated_panels:
+                
+                item = s.activated_panels.add()
+                item.space = panel.bl_space_type
+                item.region = panel.bl_region_type
+                item.name = self.panel_id
+                
         return {'FINISHED'}
     def invoke(self, context, event):
         if event.shift: # for Multi-selection self.obj = context.selected_objects
@@ -1381,13 +1384,14 @@ class VIEW3D_PT_Transform(bpy.types.Panel):
         row = layout.row()
         row.column().prop(ob, "scale")
         row.column(align = True).prop(ob, "lock_scale")
-        
+        row = layout.row()
         row.column(align = True).prop(ob, "dimensions")
 
     
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
+    original_panels = bpy.props.BoolProperty(name = 'Default blender panels', description = '', default=True)
     fixed_width = bpy.props.BoolProperty(name = 'Grid layout', default=True)
     fixed_columns = bpy.props.BoolProperty(name = 'Fixed number of colums', default=True)
     columns_properties = bpy.props.IntProperty(name = 'Columns in property window', default=3)
@@ -1399,7 +1403,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
     reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels (developer tool only)', default=False)
     hiding = bpy.props.BoolProperty(name = 'Enable panel hiding', description = 'switch to/from hiding mode', default=False)
     #hidden_panels = bpy.props.CollectionProperty(type = bpy.props.StringProperty)
-    original_panels = bpy.props.BoolProperty(name = 'Default blender panels', description = '', default=False)
+    
     # here you specify how they are drawn
     def draw(self, context):
         layout = self.layout

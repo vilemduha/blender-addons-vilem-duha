@@ -76,6 +76,7 @@ def hide_panel(tp_name):
         if hasattr(tp,'bl_options'):
             if 'DEFAULT_CLOSED' in tp.bl_options:
                 tp.bl_options.remove('DEFAULT_CLOSED')
+       
         bpy.utils.unregister_class(tp)
         _hidden_panels[tp_name] = tp
         bpy.utils.register_class(tp)
@@ -139,6 +140,7 @@ class panelData(bpy.types.PropertyGroup):
     activated = bpy.props.BoolProperty(name="activated", default=False)#, update = updatePin)
     space = bpy.props.StringProperty(name="space", default="Machine")
     region = bpy.props.StringProperty(name="region", default="Machine")
+    context = bpy.props.StringProperty(name="context", default="Machine")
  
 
     
@@ -212,22 +214,19 @@ def buildTabDir(panels):
                 region = space[rname]
                 
                 for p in region:
+                    panel = None
                     try:
                         panel = eval( 'bpy_types.bpy_types.'+p)
-                        #print(panel)
-                        #print(panel)
-                        
+                    except:
+                        print('non existing panel ' + p)
+                    if panel:
                         processPanelForTabs(panel)
                         
                         nregion.append(panel)
                         
-                    except:
-                        print('non existing panel ' + p)
-                #if rname =='UI' and sname == 'VIEW_3D':
-                    #print(region)   
+                    
                 space[rname] = nregion
-                #print(space[rname])
-        
+               
         
     
     #print('called buildtabdir')
@@ -237,8 +236,8 @@ def buildTabDir(panels):
             if st!= 'USER_PREFERENCES':
                 #print((st))
                 #toz a je to vyreseny - ten panel se asi
-                if panel.bl_label == 'Collision':
-                    print('collision in tabdir')
+                #if panel.bl_label == 'Collision':
+                    #print('collision in tabdir')
                 if spaces.get(st) == None:
                     spaces[st] = {}#[panel]
                 
@@ -256,6 +255,7 @@ def buildTabDir(panels):
                         processPanelForTabs(panel)
                         if panel.bl_label == 'Collision':
                             print('collision assign in tabdir')
+    
     return spaces 
 
 def updatePanels():    
@@ -303,7 +303,8 @@ def tabRow(layout):
     if not prefs.fixed_width:
         row.alignment = 'LEFT'
     return row
-    
+ 
+ 
 def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts = [], ids = [], tdata = [],  active = '', enable_hiding = False): #tdata=[],
     '''Creates and draws actual layout of tabs'''
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
@@ -313,6 +314,8 @@ def drawTabsLayout(layout, context, operator_name = 'wm.activate_panel', texts =
         margin +=5
     iconwidth = 25
     oplist = []
+    
+        
     if prefs.box:
         layout = layout.box()
     layout = layout.column(align = True)
@@ -1076,10 +1079,7 @@ def deActivatePanel(panel_name):
     item = bpy.context.scene.panelData.get(panel_name)
     item.activated = False     
     s.activated_panels.remove(s.activated_panels.find(panel_name))
-    
-
-
-    
+   
 class ActivatePanel(bpy.types.Operator):
     """activate panel"""
     bl_idname = 'wm.activate_panel'
@@ -1098,7 +1098,6 @@ class ActivatePanel(bpy.types.Operator):
         prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
         tabpanel = eval('bpy.types.' + self.tabpanel_id )
         s =bpy.context.scene
-        #print(_activated_panels)
         s.panelTabData[self.tabpanel_id].active_tab = self.panel_id
         
         panel = tabpanel
@@ -1109,7 +1108,7 @@ class ActivatePanel(bpy.types.Operator):
                 p = s.activated_panels[i]
                 if p.region == panel.bl_region_type and p.space == panel.bl_space_type:
                     deActivatePanel(p.name)
-                    #print(p.name)
+                   
        
         
         item.space = tabpanel.bl_space_type
@@ -1439,6 +1438,9 @@ def createSceneTabData():
             item.name = p.realID
             item.space = p.bl_space_type
             item.region = p.bl_region_type
+            if hasattr(p, 'bl_context'):
+                item.context = p.bl_context
+            item.context = p.bl_region_type
         if hasattr(p, 'bl_category'):
             c = s.categories.get(p.orig_category)
             if c == None:

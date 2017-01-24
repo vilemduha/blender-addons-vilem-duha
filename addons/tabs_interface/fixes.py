@@ -12,6 +12,8 @@ def mpath_draw(self, context):
         self.draw_settings(self, context, avs, mpath)
     else:
         self.draw_settings( context, avs, mpath)
-
-bpy.types.OBJECT_PT_motion_paths.draw = mpath_draw
-    
+def fixes():
+    try:
+        bpy.types.OBJECT_PT_motion_paths.draw = mpath_draw
+    except:
+        print("fixes couldn't be applied")

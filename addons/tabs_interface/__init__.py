@@ -113,18 +113,6 @@ DEFAULT_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__'
 
 NOCOPY_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__setitem__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_dyn_ui_initialize', 'append', 'as_pointer', 'bl_category', 'bl_context', 'bl_description', 'bl_idname', 'bl_label', 'bl_options', 'bl_region_type', 'bl_rna', 'bl_space_type', 'COMPAT_ENGINES',  'driver_add', 'driver_remove', 'get', 'id_data', 'is_property_hidden', 'is_property_readonly', 'is_property_set', 'items', 'keyframe_delete', 'keyframe_insert', 'keys',  'orig_category', 'path_from_id', 'path_resolve', 'poll', 'prepend', 'property_unset', 'remove', 'type_recast', 'values']
 
-   
-def updatePin(self, context):
-    pname = self.name
-    s = bpy.context.scene
-    if self.pin:
-        if pname not in s.pinned_panels:
-            litem = s.pinned_panels.add()
-            litem.name = s.panelData[pname].name
-            litem.space = s.panelData[pname].space
-    elif pname in s.pinned_panels:
-        s.pinned_panels.remove(s.pinned_panels.find(pname))
-       
 
 
 class tabSetups(bpy.types.PropertyGroup):
@@ -134,25 +122,19 @@ class tabSetups(bpy.types.PropertyGroup):
     show = bpy.props.BoolProperty(name="show", default=True)#, update = updatePin)
     active_tab = bpy.props.StringProperty(name="Active tab", default="Machine")
     active_category = bpy.props.StringProperty(name="Active category", default="Machine")
-    #active_category = bpy.props.StringProperty(name="Active category", default="Machine")
-           
+          
 class tabCategoryData(bpy.types.PropertyGroup):
     #''stores data for categories''
+    show = bpy.props.BoolProperty(name="show", default=True)
     
-    #id = bpy.props.StringProperty(name="panel id", default="")
-    #pin = bpy.props.BoolProperty(name="pin", default=False, update = updatePin)
-    show = bpy.props.BoolProperty(name="show", default=True)#, update = updatePin)
-    #space = bpy.props.StringProperty(name="space", default="Machine")
-
             
             
 class panelData(bpy.types.PropertyGroup):
     '''stores data for panels'''
     
-    #id = bpy.props.StringProperty(name="panel id", default="")
-    pin = bpy.props.BoolProperty(name="pin", default=False, update = updatePin)
-    show = bpy.props.BoolProperty(name="show", default=True)#, update = updatePin)
-    activated = bpy.props.BoolProperty(name="activated", default=False)#, update = updatePin)
+    pin = bpy.props.BoolProperty(name="pin", default=False)#, update = updatePin)
+    show = bpy.props.BoolProperty(name="show", default=True)
+    activated = bpy.props.BoolProperty(name="activated", default=False)
     space = bpy.props.StringProperty(name="space", default="Machine")
     region = bpy.props.StringProperty(name="region", default="Machine")
     context = bpy.props.StringProperty(name="context", default="Machine")
@@ -193,16 +175,6 @@ def getPanelIDs():
     #print(tp)  
     
     return newIDs
-   
-class myPanel:
-    pass
-    
-'''
-DATA_PT_modifiers.draw = modifiersDraw
-    bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
-    bpy.types.BONE_PT_constraints.draw = 
-'''
-
 
         
 def buildTabDir(panels):
@@ -600,22 +572,7 @@ def drawTabs(self,context,plist, tabID):
         if pdata.pin or pdata.activated:
             draw_panels.append(p)
    # print('wau')
-    '''
-    for pdata in s.pinned_panels:
-        #attempt to pin panel in property window, doesn't work :( due to context issues, e.g. transform locks panel was screwed.
-        #if pdata.space == getspace == 'PROPERTIES':
-        #   draw_panels.append(eval('bpy.types.' + pdata.name))
-        #else:
-        #pinning
-        for p in plist:#this could be smartsr, avoid for loop?
-            if p.realID == pdata.name:
-                draw_panels.append(p)
-                
-    for pdata in s.activated_panels:
-        for p in plist:#this could be smartsr, avoid for loop?
-            if p.realID == pdata.name and p not in draw_panels:
-                draw_panels.append(p)
-    '''
+   
     for p in plist:
         if hasattr(p,'bl_category'):
             if categories.get(p.orig_category) == None:
@@ -884,20 +841,7 @@ def pollTabs(panels, context):
             except:
                 pass#print ("Unexpected error:", sys.exc_info()[0])
             #polled = p.opoll(context)
-            '''
-            try:
-                
-                if hasattr(p,'opoll'):
-                    polled = p.opoll(context)
-                    #print('opoll',p.bl_label, p.opoll(context))
-                else:
-                    #print('poll')
-                    polled = p.poll(context)
-            except:
-                #print ("Unexpected error:", sys.exc_info()[0])
-                pass;
-                print('badly implemented poll', p.bl_label)
-            '''
+            
         if polled:
             draw_plist.append(p)     
     #print('polled', len(panels), len(draw_plist))
@@ -1143,25 +1087,12 @@ class WritePanelOrder(bpy.types.Operator):
         ddef = ddef.replace(", ",",\n    " )
         ddef = ddef.replace("]},","]},\n    " )
         ddef = ddef.replace("]}}","]}}" )
-        '''
-        ddef = ddef.replace('},','},\n    ')
-        ddef = ddef.replace("'],",'],\n    ' )
-        ddef = ddef.replace("['","[\n    " )
-        ddef = ddef.replace("', '",",\n    " )
-        ddef = ddef.replace("']},","]},\n    " )
-        ddef = ddef.replace("']}}","]}}" )
-        '''
+       
         #ddef.replace(',',']ahoj' )
         f.write(ddef)
         f.close()
         return {'FINISHED'}
-'''        
-def deActivatePanel(panel_name):
-    s = bpy.context.scene
-    item = bpy.context.scene.panelData.get(panel_name)
-    item.activated = False     
-    #s.activated_panels.remove(s.activated_panels.find(panel_name))
-'''   
+
 class ActivatePanel(bpy.types.Operator):
     """activate panel"""
     bl_idname = 'wm.activate_panel'
@@ -1338,18 +1269,6 @@ class TabsPanel:
     @classmethod
     def poll(cls, context):
         prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
-    
-        '''
-        tabspanel_info = bpy.types.Scene.panelTabInfo.get(cls.bl_idname)
-        if tabspanel_info == None:
-            return True
-        possible_tabs = tabspanel_info[1]
-        draw_tabs_list = pollTabs(possible_tabs, context)
-        #print(cls.bl_region_type,cls.bl_space_type,len(draw_tabs_list),len(tabspanel_info[1]))
-        #if tabspanel_info!= None:
-           # c = len(pollTabs(tabspanel_info[1], context))
-            #print('poll',cls.bl_idname, c, len(tabspanel_info[1]))
-            '''
         if prefs.enable_disabling:
             if prefs.disable_PROPERTIES and context.area.type == 'PROPERTIES':
                 return False
@@ -1640,16 +1559,7 @@ def scene_update_handler(scene):
         if not hasattr(p, 'realID'):
             buildTabDir([p])
         bpy.context.scene.panelData[p.realID].activated = True
-'''
-@persistent
-def object_select_handler(scene):
-    s = bpy.context.scene
-    if bpy.context.active_object:
-        if not hasattr(s,'active_previous'):
-            s.active_previous = bpy.context.active_object.name
-        if bpy.context.active_object.name != s.active_previous:
-            s.active_previous = bpy.context.active_object.name
-'''        
+    
 
         
 def register():
@@ -1682,9 +1592,6 @@ def register():
     bpy.types.Scene.panelTabData = bpy.props.CollectionProperty(type=tabSetups)
     bpy.types.Scene.categories = bpy.props.CollectionProperty(type=tabCategoryData)
     
-    bpy.types.Scene.pinned_panels = bpy.props.CollectionProperty(type=panelData) #only pinned pann
-    bpy.types.Scene.activated_panels = bpy.props.CollectionProperty(type=panelData) #only pinned pann
-    #bpy.types.Scene.hidden_tabs = bpy.props.CollectionProperty(type=panelData)
     bpy.app.handlers.load_post.append(scene_load_handler)
     bpy.app.handlers.scene_update_pre.append(scene_update_handler)
     

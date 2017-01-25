@@ -20,7 +20,7 @@ from tabs_interface import panel_order , fixes
 
 
 _update_tabs = []
-
+_extra_activations = []
 @classmethod
 def noPoll(cls, context):
     return False
@@ -335,9 +335,9 @@ def drawTabsLayout(layout, context, tabpanel = None, operator_name = 'wm.activat
     '''Creates and draws actual layout of tabs'''
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     w = context.region.width
-    margin = 20 
+    margin = 18 
     if prefs.box:
-        margin +=5
+        margin +=10
     iconwidth = 20
     oplist = []
     
@@ -422,6 +422,7 @@ def drawTabsLayout(layout, context, tabpanel = None, operator_name = 'wm.activat
             i+=1    
             #
     else:# GRID  layout
+        w = w - margin
         wtabcount = math.floor(w/80)
         if wtabcount == 0:
             wtabcount = 1
@@ -705,6 +706,7 @@ def drawTabs(self,context,plist, tabID):
         p = plist[0]
         if p not in draw_panels:
             draw_panels.append(p)
+            _extra_activations.append(p)
     #print(plist)
     layout.active = True
     if preview != None:
@@ -1484,11 +1486,15 @@ def createSceneTabData():
     print('create tab panel data')
     s = bpy.context.scene
     #print('handler')
+    processpanels = []
     for pname in bpy.types.Scene.panelIDs:
         p = bpy.types.Scene.panelIDs[pname]
         #print('space update in creatabpaneldata', pname)
         if not hasattr(p, 'realID') or s.panelData.get(p.realID) == None or p not in s.panelSpaces[p.bl_space_type][p.bl_region_type]:
-            buildTabDir([p])
+            processpanels.append(p)
+    if len(processpanels)>0:
+         buildTabDir(processpanels)
+    for pname in bpy.types.Scene.panelIDs:
         if not p.realID in bpy.context.scene.panelData:
             item = bpy.context.scene.panelData.add()
             item.name = p.realID
@@ -1528,6 +1534,12 @@ def scene_load_handler(scene):
     createSceneTabData()
     fixes.fixes()
     
+    try:
+        bpy.types.DATA_PT_modifiers.draw = modifiersDraw
+        bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
+        bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
+    except:
+        pass
             
 @persistent
 def scene_update_handler(scene):
@@ -1557,6 +1569,10 @@ def scene_update_handler(scene):
         else:
             s['updatetime']+=tadd
         '''
+    for p in _extra_activations:
+        if not hasattr(p, 'realID'):
+            buildTabDir([p])
+        bpy.context.scene.panelData[p.realID].activated = True
 '''
 @persistent
 def object_select_handler(scene):
@@ -1589,9 +1605,6 @@ def register():
     bpy.utils.register_class(tabCategoryData)
     bpy.utils.register_class(TabInterfacePreferences)
     
-    bpy.types.DATA_PT_modifiers.draw = modifiersDraw
-    bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
-    bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
     
     bpy.types.Scene.active_previous = bpy.props.StringProperty(name = 'active object previous', default = '')
     bpy.types.Object.active_modifier = bpy.props.StringProperty(name = 'active modifier', default = '')

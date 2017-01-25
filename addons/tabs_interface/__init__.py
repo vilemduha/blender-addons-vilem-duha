@@ -2,7 +2,7 @@
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
-    "version": (1, 1),
+    "version": (1, 2),
     "blender": (2, 78, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",
@@ -32,9 +32,6 @@ def yesPoll(cls, context):
 @classmethod
 def smartPoll(cls, context):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
-    
-   
-    
     polled = cls.opoll(context)
     item = bpy.context.scene.panelData.get(cls.realID)
     
@@ -137,9 +134,9 @@ class panelData(bpy.types.PropertyGroup):
     pin = bpy.props.BoolProperty(name="pin", default=False)#, update = updatePin)
     show = bpy.props.BoolProperty(name="show", default=True)
     activated = bpy.props.BoolProperty(name="activated", default=False)
-    space = bpy.props.StringProperty(name="space", default="Machine")
-    region = bpy.props.StringProperty(name="region", default="Machine")
-    context = bpy.props.StringProperty(name="context", default="Machine")
+    space = bpy.props.StringProperty(name="space", default="")
+    region = bpy.props.StringProperty(name="region", default="")
+    context = bpy.props.StringProperty(name="context", default="")
  
 
     
@@ -250,9 +247,7 @@ def updatePanels():
         newIDs = getPanelIDs() #bpy.types.Scene.panels = 
         bpy.types.Scene.panelSpaces = buildTabDir(newIDs)
         createSceneTabData()
-        
-        #print(getPanels)
-        #print(newIDs)
+       
 def getPanels(getspace, getregion):
     if not hasattr(bpy.types.Scene, 'panelIDs'):
         updatePanels()
@@ -350,7 +345,9 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
         
         rows = 0
         i=0
+        lastsplit = None
         for t,id in zip(texts,ids):
+           
             last_tw = tw
             if prefs.emboss and restspace != baserest: 
                 drawtext = '| ' +t
@@ -361,9 +358,12 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
             if i == 0 and tabpanel!= None and prefs.enable_folding:
                 tw += iconwidth
                 split.prop(tabpanel,'show' , icon_only = True, icon = 'DOWNARROW_HLT' , emboss = False)
-                
+            
             if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
                 tw += 10
+            
+            if enable_hiding and not prefs.hiding and not tdata[i].show:
+                tw = 0
             
             oldrestspace = restspace
             restspace = restspace - tw
@@ -375,14 +375,6 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
                 drawtext = t
                 tw = getApproximateFontStringWidth(drawtext)
                 if rows ==0 and enable_hiding: #draw hiding mode icon here
-                    if oldrestspace>iconwidth:
-                        split = split.split((oldrestspace - iconwidth)/oldrestspace, align = False)
-                        #split = split.split()
-                    if prefs.hiding:
-                        icon = 'RESTRICT_VIEW_ON'
-                    else:
-                        icon = 'RESTRICT_VIEW_OFF'
-                    row.prop(prefs,'hiding' , icon_only = True, icon=icon, emboss = not prefs.emboss)
                     if prefs.hiding:
                         tw += iconwidth
                 if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
@@ -397,14 +389,36 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
                 split.prop(tdata[i], 'show', text = drawtext)
                 oplist.append(None)
             else:
+                if tdata[i].show:    
             
-                if active[i]:
-                    op = split.operator(operator_name, text=drawtext , emboss = prefs.emboss)
+                    if active[i]:
+                        op = split.operator(operator_name, text=drawtext , emboss = prefs.emboss)
+                    else:
+                        op = split.operator(operator_name, text=drawtext , emboss = not prefs.emboss)
+                    oplist.append(op)
                 else:
-                    op = split.operator(operator_name, text=drawtext , emboss = not prefs.emboss)
-                oplist.append(op)
-            i+=1    
-            #
+                    oplist.append(None)
+            
+            i+=1  
+            if rows ==0 and enable_hiding: 
+                lastsplit = split
+                firstrow = row
+                lastsplit_restspace  = restspace
+        if lastsplit !=None:       
+            #if oldrestspace>iconwidth:
+            #print (lastsplit_restspace)
+            split = lastsplit
+            if lastsplit_restspace-iconwidth>0:
+                split = lastsplit.split((lastsplit_restspace - iconwidth)/lastsplit_restspace, align = False)
+               
+            #split = split.split()
+            
+            if prefs.hiding:
+                icon = 'RESTRICT_VIEW_ON'
+            else:
+                icon = 'RESTRICT_VIEW_OFF'
+            firstrow.prop(prefs,'hiding' , icon_only = True, icon=icon, emboss = not prefs.emboss)
+            
     else:# GRID  layout
         w = w - margin
         wtabcount = math.floor(w/80)
@@ -431,14 +445,16 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
         i=0
         
         for t,id in zip(texts,ids):
+            if tabpanel!= None and i ==0 and prefs.enable_folding:
+                ratio , lastsplit = nextSplit( regwidth = w, width = iconwidth, last = 0)
+                split = row.split(ratio, align = True)
+
+                split.prop(tabpanel,'show' , icon_only = True, icon = 'DOWNARROW_HLT' , emboss = False)
+                row = split.split(align = True)
+                
             if (enable_hiding and prefs.hiding) or (not enable_hiding or tdata[i].show):
                 #nextSplit( regwidth = 100,width = none, percent = None, lasttotalsplit = 0)
-                if tabpanel!= None and i ==0 and prefs.enable_folding:
-                    ratio , lastsplit = nextSplit( regwidth = w, width = iconwidth, last = 0)
-                    split = row.split(ratio, align = True)
-
-                    split.prop(tabpanel,'show' , icon_only = True, icon = 'DOWNARROW_HLT' , emboss = False)
-                    row = split.split(align = True)
+                
                    
                 splitratio = (ti+1)/(wtabcount)
                 if splitratio == 1 and rows == 0 and enable_hiding:
@@ -1549,29 +1565,33 @@ def createSceneTabData():
     #print('handler')
     processpanels = []
     for pname in bpy.types.Scene.panelIDs:
-        p = getattr(bpy.types, pname)
-        if not hasattr(p, 'realID') or s.panelData.get(p.realID) == None or p not in s.panelSpaces[p.bl_space_type][p.bl_region_type]:
-            processpanels.append(p)
+        if hasattr(bpy.types, pname):
+            p = getattr(bpy.types, pname)
+            if not hasattr(p, 'realID') or s.panelData.get(p.realID) == None or p not in s.panelSpaces[p.bl_space_type][p.bl_region_type]:
+                processpanels.append(p)
+        else:
+            bpy.types.Scene.panelIDs.remove(pname)
     if len(processpanels)>0:
          buildTabDir(processpanels)
     for pname in bpy.types.Scene.panelIDs:
-        p = getattr(bpy.types, pname)
-        if not p.realID in bpy.context.scene.panelData:
-            item = bpy.context.scene.panelData.add()
-            item.name = p.realID
-            item.space = p.bl_space_type
-            item.region = p.bl_region_type
-            if hasattr(p, 'bl_context'):
-                item.context = p.bl_context
-            item.context = p.bl_region_type
-        
-        
-        if hasattr(p, 'bl_category'):
-            c = s.categories.get(p.orig_category)
-            if c == None:
-                #print(p.orig_category)
-                c = s.categories.add();
-                c.name = p.orig_category       
+        if hasattr(bpy.types, pname):
+            p = getattr(bpy.types, pname)
+            if not p.realID in bpy.context.scene.panelData:
+                item = bpy.context.scene.panelData.add()
+                item.name = p.realID
+                item.space = p.bl_space_type
+                item.region = p.bl_region_type
+                if hasattr(p, 'bl_context'):
+                    item.context = p.bl_context
+                item.context = p.bl_region_type
+            
+            
+            if hasattr(p, 'bl_category'):
+                c = s.categories.get(p.orig_category)
+                if c == None:
+                    #print(p.orig_category)
+                    c = s.categories.add();
+                    c.name = p.orig_category       
         
         
   

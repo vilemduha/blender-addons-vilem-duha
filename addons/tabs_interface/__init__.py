@@ -2,7 +2,7 @@
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
-    "version": (1, 2, 1),
+    "version": (1, 2, 2),
     "blender": (2, 78, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",
@@ -662,7 +662,7 @@ def drawTabs(self,context,plist, tabID):
     maincol = layout.column(align = True)
     
     
-    if len(categories)>0: #EVIL TOOL PANELS!       
+    if len(categories)>1: #EVIL TOOL PANELS!       
         #row=tabRow(maincol)
         if len(categories) > 1:
             if tabpanel_data.show:
@@ -716,11 +716,16 @@ def drawTabs(self,context,plist, tabID):
                     op.panel_id=p.realID
                     op.tabpanel_id=tabID
                     op.category=active_category
-    elif len(plist)==1 and len(draw_panels == 0):# or (len(draw_panels == 0) and len(plist)>0):
+    
+    if len(draw_panels) == 0 and len(plist)>0:# and len(categories)== 1)or (len(categories)=>1 and len ) :# or (len(draw_panels == 0) and len(plist)>0):
+        #if len(categories)>0:
+        #print('ujoj')
         p = plist[0]
+        print(draw_panels)
         if p not in draw_panels:
             draw_panels.append(p)
             _extra_activations.append(p)
+            
     #print(plist)
     layout.active = True
     if preview != None:
@@ -996,9 +1001,13 @@ def getFilteredTabs(self,context):
                     elif panel.bl_context == 'objectmode':
                         pctx = 'OBJECT'
                     
+                    
                     if not pctx == context.mode:
                         polled =False
-                        pass
+                        
+                        
+                    if panel.bl_context == 'scene': #openGL lights addon problem
+                        polled = True
                    #print((context.space_data.context))
             if polled:
                 possible_tabs_wider.append(panel)
@@ -1219,6 +1228,7 @@ class ActivatePanel(bpy.types.Operator):
                 s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
 
         return {'FINISHED'}
+        
     def invoke(self, context, event):
         if event.shift: # for Multi-selection self.obj = context.selected_objects
             self.shift = True
@@ -1405,7 +1415,7 @@ def createPanels():
             categories={}
             contexts={}
             for panel in region:
-                if hasattr(panel, 'bl_context'):
+                if hasattr(panel, 'bl_context') and panel.bl_context!='scene':#scene context because of opengl lights addon
                     contexts[panel.bl_context] = 1
                 if hasattr(panel, 'bl_category'):
                     categories[panel.bl_category] = True
@@ -1717,9 +1727,8 @@ def scene_update_handler(scene):
             s['updatetime']+=tadd
         '''
         overrideDrawFunctions()
-    for p in _extra_activations:
-        if not hasattr(p, 'realID'):
-            buildTabDir([p])
+    while len(_extra_activations)>0:
+        p = _extra_activations.pop()
         bpy.context.scene.panelData[p.realID].activated = True
     
 

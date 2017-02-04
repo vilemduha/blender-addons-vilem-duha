@@ -12,7 +12,7 @@ bl_info = {
     "category": "All"}
 
 import bpy,os, math, string, random, time
-
+import inspect
 import bpy, bpy_types
 from bpy.app.handlers import persistent
 from tabs_interface.panel_order import spaces
@@ -22,6 +22,8 @@ from tabs_interface import panel_order , fixes
 _update_tabs = []
 _update_categories = []
 _extra_activations = []
+USE_DEFAULT_POLL = False #Pie menu editor compatibility
+
 @classmethod
 def noPoll(cls, context):
     return False
@@ -33,6 +35,10 @@ def yesPoll(cls, context):
 def smartPoll(cls, context):
     prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
     polled = cls.opoll(context)
+    
+    if USE_DEFAULT_POLL:
+        return polled
+    
     item = bpy.context.scene.panelData.get(cls.realID)
     
     if prefs.enable_disabling:
@@ -706,7 +712,7 @@ def drawTabs(self,context,plist, tabID):
                 active.append(panel_data[p.realID].activated)
         #print(texts)      
         if tabpanel_data.show:
-            if len(categories) == 0:
+            if len(categories) == 1:
                 tabpanel = tabpanel_data
             else:
                 tabpanel = None #roaoao@gmail.com
@@ -889,6 +895,8 @@ def drawPanels(self, context, draw_panels):
         
         row = box.row()
         row.scale_y=.6
+        
+        
         if hasattr(drawPanel, "draw_header"):
             fakeself = CarryLayout(row)
             if hasattr(drawPanel, 'orig_draw_header'):
@@ -904,8 +912,14 @@ def drawPanels(self, context, draw_panels):
         # these are various functions defined all around blender for panels. We need them to draw the panel inside the tab panel
         
         if hasattr(drawPanel, "draw"):
-            #layoutActive(self,context)
-            drawPanel.draw(self,context)
+            #layoutActive(self,context) bpy.types.VIEW3D_PT_weight_palette(bpy.context.window_manager)
+            pInstance = drawPanel(bpy.context.window_manager)
+            
+            #arg_spec = inspect.getargspec(pInstance.draw)
+            #print(arg_spec.args)
+            pInstance.layout = layout
+            #p.draw(bpy.context)
+            drawPanel.draw(pInstance,context)
         layoutActive(self,context)
         
         layout.separator()
@@ -1034,6 +1048,7 @@ def drawRegionUI(self,context):#, getspace, getregion, tabID):
     #print('filtered',len(draw_tabs_list))   
     draw_panels = drawTabs(self, context, draw_tabs_list, tabID)       
     if not prefs.original_panels:
+        #print(draw_panels)
         drawPanels(self, context, draw_panels)
     
 
@@ -1663,6 +1678,8 @@ def createSceneTabData():
     
 def overrideDrawFunctions():
     s = bpy.context.scene
+    if s.get('functions overwrite success') == None:
+        s['functions overwrite success'] = False
     if not s['functions overwrite success']:
         try:
             bpy.types.DATA_PT_modifiers.draw = modifiersDraw
@@ -1684,9 +1701,9 @@ def scene_load_handler(scene):
         updatePanels()
     s['bpy_types_len'] = btypeslen
     createSceneTabData()
-    fixes.fixes()
+    #fixes.fixes()
     
-    s['functions overwrite success'] = False
+    
     overrideDrawFunctions()
     
             

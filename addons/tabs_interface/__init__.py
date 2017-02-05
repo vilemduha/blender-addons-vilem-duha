@@ -38,7 +38,7 @@ def smartPoll(cls, context):
     
     if USE_DEFAULT_POLL:
         return polled
-    
+    #print( ' smart poll', cls.realID)
     item = bpy.context.scene.panelData.get(cls.realID)
     
     if prefs.enable_disabling:
@@ -172,23 +172,21 @@ def getPanelIDs():
     btypeslen = len(typedir)
     
     for tp_name in typedir:
-        if tp_name.find('_tabs')==-1  or tp_name not in DONT_USE: #and tp_name.find('NODE_PT_category_')==-1
+        if tp_name.find('_tabs')==-1  and tp_name not in DONT_USE: #and tp_name.find('NODE_PT_category_')==-1
             tp = getattr(bpy.types, tp_name)
-            #print(tp)
-            if tp == panel_tp or not issubclass(tp, panel_tp):
+            if tp == panel_tp or not issubclass(tp, panel_tp) or tp.bl_space_type == 'USER_PREFERENCES':
                 continue
-                
-            #if (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
-                #print(tp.bl_rna.identifier)
-            if hasattr(tp, 'bl_space_type') and tp.bl_space_type == 'INFO':
-                print('huhuhu', tp.bl_rna.identifier)
-            if not (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
-                if s.panelIDs.get(tp.bl_rna.identifier) == None:
-                        newIDs.append(tp)
-                s.panelIDs[tp.bl_rna.identifier] = tp
-                if tp.is_registered!=True:
-                    print('not registered', tp.bl_label)
-                
+            
+            #if not (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
+            if s.panelIDs.get(tp.bl_rna.identifier) == None:
+                    newIDs.append(tp)
+            s.panelIDs[tp.bl_rna.identifier] = tp
+            if tp.is_registered!=True:
+                print('not registered', tp.bl_label)
+            #else:
+            #    print( 'hide header ###########################', tp.bl_label, tp.bl_rna.identifier)
+        #else:
+            #print('SOMETHING ELSE            ',tp_name)
                            
     #print(tp)  
     
@@ -216,8 +214,8 @@ def buildTabDir(panels):
                             if panel:
                                 processPanelForTabs(panel)
                                 nregion.append(panel)
-                            else:    
-                                print('non existing panel ' + str(p))
+                            #else:    
+                             #   print('non existing panel ' + str(p))
                         
                     space[rname] = nregion
    
@@ -602,11 +600,21 @@ def drawTabs(self,context,plist, tabID):
     
     if not tabpanel_data.show:
         drawFoldHeader(self,context,tabpanel_data)
-    
-     
+        
+    top_panel = None
     for p in plist:
         pdata = panel_data[p.realID]
-        if pdata.pin or pdata.activated:
+        
+        if hasattr(p, 'bl_options'):
+            if 'HIDE_HEADER' in p.bl_options:
+                #print( ' extra draw', p)
+                top_panel = p #draw_panels.append(p)
+                plist.remove(p)
+
+    
+    for p in plist:
+        pdata = panel_data[p.realID]
+        if p not in draw_panels and pdata.pin or pdata.activated:
             draw_panels.append(p)
    # print('wau')
    
@@ -662,8 +670,11 @@ def drawTabs(self,context,plist, tabID):
                 active.append(False)
     
     
-    
+    if top_panel !=None:
+        top_panel.draw(self, context)
+        
     preview= None
+    
     layout = self.layout
     maincol = layout.column(align = True)
     
@@ -734,6 +745,7 @@ def drawTabs(self,context,plist, tabID):
             
     #print(plist)
     layout.active = True
+    
     if preview != None:
         preview.draw(self, context)
     return draw_panels
@@ -886,29 +898,31 @@ def drawPanels(self, context, draw_panels):
     layout = self.layout
     #print(draw_panels)
     for drawPanel in draw_panels:
-        for var in dir(drawPanel):
-            if var not in DEFAULT_PANEL_PROPS:
-                exec('self.'+var +' = drawPanel.' + var)
-                
-        box = layout.box()
-        box.scale_y =1
-        
-        row = box.row()
-        row.scale_y=.6
-        
-        
-        if hasattr(drawPanel, "draw_header"):
-            fakeself = CarryLayout(row)
-            if hasattr(drawPanel, 'orig_draw_header'):
-                drawPanel.orig_draw_header(fakeself,context)
-            #else:   
-            #    drawPanel.draw_header(fakeself,context)
+        #not needed anymore, new drawing from instance ;)
+        #for var in dir(drawPanel):
+        #    if var not in DEFAULT_PANEL_PROPS:
+        #        exec('self.'+var +' = drawPanel.' + var)
+        if drawPanel.bl_label!='':     
+            box = layout.box()
+            box.scale_y =1
             
-        row.label(drawPanel.bl_label)
-        pd = bpy.context.scene.panelData[drawPanel.realID]
-        if pd.pin: icon = 'PINNED'
-        else: icon = 'UNPINNED'
-        row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon, emboss = False)
+            row = box.row()
+            row.scale_y=.8
+        
+        
+            if hasattr(drawPanel, "draw_header"):
+                fakeself = CarryLayout(row)
+                if hasattr(drawPanel, 'orig_draw_header'):
+                    drawPanel.orig_draw_header(fakeself,context)
+                #else:   
+                #    drawPanel.draw_header(fakeself,context)
+                
+            row.label(drawPanel.bl_label)
+        
+            pd = bpy.context.scene.panelData[drawPanel.realID]
+            if pd.pin: icon = 'PINNED'
+            else: icon = 'UNPINNED'
+            row.prop(bpy.context.scene.panelData[drawPanel.realID],'pin' , icon_only = True, icon=icon, emboss = False)
         # these are various functions defined all around blender for panels. We need them to draw the panel inside the tab panel
         
         if hasattr(drawPanel, "draw"):
@@ -973,7 +987,7 @@ def getFilteredTabs(self,context):
         if not hasattr(panel, 'bl_label'):
             print ('not a panel' ,panel)
         
-        elif panel.bl_label!= '':# and panel.bl_label!= 'Influence' and panel.bl_label!= 'Mapping': #these were crashing. not anymore.
+        else:# panel.bl_label!= '':# and panel.bl_label!= 'Influence' and panel.bl_label!= 'Mapping': #these were crashing. not anymore.
             polled = True
             
             #first  filter context and category before doing eval and getting actual panel object. still using  fo data.
@@ -1678,14 +1692,14 @@ def createSceneTabData():
     
 def overrideDrawFunctions():
     s = bpy.context.scene
-    if s.get('functions overwrite success') == None:
-        s['functions overwrite success'] = False
-    if not s['functions overwrite success']:
+    if s.get('functions_overwrite_success') == None:
+        s['functions_overwrite_success'] = False
+    if not s['functions_overwrite_success']:
         try:
             bpy.types.DATA_PT_modifiers.draw = modifiersDraw
             bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
             bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
-            s['functions overwrite success'] = True
+            s['functions_overwrite_success'] = True
         except:
             pass
             
@@ -1701,19 +1715,9 @@ def scene_load_handler(scene):
         updatePanels()
     s['bpy_types_len'] = btypeslen
     createSceneTabData()
-    #fixes.fixes()
-    
-    
+    #fixes.fixes() #fixes not needed at all since new release
+    s['functions_overwrite_success'] = False
     overrideDrawFunctions()
-    
-            
-'''
-        if area.type == 'VIEW_3D':
-            override = {'window': window, 'screen': screen, 'area': area}
-            bpy.ops.screen.screen_full_area(override)
-            break
-'''
-
             
 @persistent
 def scene_update_handler(scene):

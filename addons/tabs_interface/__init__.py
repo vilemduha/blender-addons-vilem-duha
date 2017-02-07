@@ -2,7 +2,7 @@
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
-    "version": (1, 2, 2),
+    "version": (1, 3),
     "blender": (2, 78, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",
@@ -16,7 +16,7 @@ import inspect
 import bpy, bpy_types
 from bpy.app.handlers import persistent
 from tabs_interface.panel_order import spaces
-from tabs_interface import panel_order , fixes
+from tabs_interface import panel_order 
 
 
 _update_tabs = []
@@ -38,7 +38,7 @@ def smartPoll(cls, context):
     
     if USE_DEFAULT_POLL:
         return polled
-    #print( ' smart poll', cls.realID)
+    print( ' smart poll', cls.realID)
     item = bpy.context.scene.panelData.get(cls.realID)
     
     if prefs.enable_disabling:
@@ -48,7 +48,8 @@ def smartPoll(cls, context):
             return polled
         if prefs.disable_UI and context.region.type == 'UI':
             return polled
-    return (item.activated or item.pin) and polled and item.show and (prefs.original_panels)
+    
+    return ((item.activated and item.activated_category) or item.pin) and polled and item.show and (prefs.original_panels)
     
 def drawHeaderPin(cls, context):
     layout = cls.layout
@@ -137,7 +138,7 @@ class tabSetups(bpy.types.PropertyGroup):
         items=[('tabID', 'tabb', 'tabbiiiieeee')])
     show = bpy.props.BoolProperty(name="show", default=True)#, update = updatePin)
     active_tab = bpy.props.StringProperty(name="Active tab", default="Machine")
-    active_category = bpy.props.StringProperty(name="Active category", default="Machine")
+    active_category = bpy.props.StringProperty(name="Active category", default="None")
           
 class tabCategoryData(bpy.types.PropertyGroup):
     #''stores data for categories''
@@ -151,6 +152,8 @@ class panelData(bpy.types.PropertyGroup):
     pin = bpy.props.BoolProperty(name="pin", default=False)#, update = updatePin)
     show = bpy.props.BoolProperty(name="show", default=True)
     activated = bpy.props.BoolProperty(name="activated", default=False)
+    activated_category = bpy.props.BoolProperty(name="activated category", default=True)
+    category = bpy.props.StringProperty(name="category", default='Tools')
     space = bpy.props.StringProperty(name="space", default="")
     region = bpy.props.StringProperty(name="region", default="")
     context = bpy.props.StringProperty(name="context", default="")
@@ -593,7 +596,7 @@ def drawTabs(self,context,plist, tabID):
     categories={}
     categories_list = []#this because it can be sorted, not like dict.
    
-    active_tab = tabpanel_data.active_tab
+    active_tab = tabpanel_data.active_tab #
     active_category = tabpanel_data.active_category
     hasactivetab = False
     hasactivecategory = False
@@ -606,16 +609,13 @@ def drawTabs(self,context,plist, tabID):
         pdata = panel_data[p.realID]
         
         if hasattr(p, 'bl_options'):
-            if 'HIDE_HEADER' in p.bl_options:
+            if 'HIDE_HEADER' in p.bl_options and not (p.bl_region_type == 'TOOLS' and p.bl_space_type == 'VIEW_3D'): #further exceptions only for GroupPro addon :(
                 #print( ' extra draw', p)
                 top_panel = p #draw_panels.append(p)
                 plist.remove(p)
 
     
-    for p in plist:
-        pdata = panel_data[p.realID]
-        if p not in draw_panels and pdata.pin or pdata.activated:
-            draw_panels.append(p)
+    
    # print('wau')
    
     for p in plist:
@@ -628,7 +628,10 @@ def drawTabs(self,context,plist, tabID):
         if  tabpanel_data.active_tab == p.realID:
             hasactivetab = True
             
-   
+    for p in plist:
+        pdata = panel_data[p.realID]
+        if p not in draw_panels and pdata.pin or (pdata.activated  and (len(categories)==1 or p.orig_category == active_category)):
+            draw_panels.append(p)
         
     if len(categories)>0:
         #print('hascategories')
@@ -726,7 +729,7 @@ def drawTabs(self,context,plist, tabID):
             if len(categories) == 1:
                 tabpanel = tabpanel_data
             else:
-                tabpanel = None #roaoao@gmail.com
+                tabpanel = None #roaoao at gmail.com
             tabops = drawTabsLayout(self, context, maincol, tabpanel = tabpanel,  operator_name ='wm.activate_panel', texts = texts, ids = ids, tdata = tdata, active = active, enable_hiding = True)   
             for op,p in zip(tabops, tabpanels):
                 if op!=None:
@@ -738,7 +741,7 @@ def drawTabs(self,context,plist, tabID):
         #if len(categories)>0:
         #print('ujoj')
         p = plist[0]
-        print(draw_panels)
+        #print(draw_panels)
         if p not in draw_panels:
             draw_panels.append(p)
             _extra_activations.append(p)
@@ -1229,32 +1232,28 @@ class ActivatePanel(bpy.types.Operator):
         s.panelTabData[self.tabpanel_id].active_tab = self.panel_id
         
         panel = tabpanel
-        item = bpy.context.scene.panelData.get(self.panel_id)
-        
+        item = s.panelData.get(self.panel_id)
+        apanel =getattr(bpy.types, self.panel_id)
         #print(context.area.type, context.region.type)
         plist = s.panelSpaces[panel.bl_space_type][panel.bl_region_type]
+        
         if not self.shift:
             for p in plist:
-                #print(p.bl_label)
-                #if hasattr(panel,'bl_context'):
-                    # print(p.context, panel.bl_context)
-                #print(p.bl_region_type,p.bl_space_type, panel.bl_region_type, panel.bl_space_type)
-                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and (not hasattr(panel,'bl_context') or p.bl_context==panel.bl_context):
+                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and (not hasattr(apanel,'bl_context') or (hasattr(p, 'bl_context') and p.bl_context==apanel.bl_context)) and (p.orig_category == apanel.orig_category):
+                    #this condition does : check region, space
+                    #                        same context - mainly property window
+                    #                       same category - mainly toolbar. This makes it possible to have active tabs inside categories and not having them all display panels. magic!
                     pdata = s.panelData[p.realID]
                     pdata.activated = False
-                   
-       
-        
-        item.space = tabpanel.bl_space_type
-        
+ 
         #if prefs.original_panels:
         if self.shift and item.activated:
             item.activated = False
         else:
             item.activated = True
             #this is also allready obsolete? not yet so much?
-            if self.category!= '':
-                s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
+            #if self.category!= '':
+            #    s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
 
         return {'FINISHED'}
         
@@ -1299,6 +1298,18 @@ class ActivateCategory(bpy.types.Operator):
             self.shift = False
         if self.single_panel != '':
             bpy.ops.wm.activate_panel( tabpanel_id = self.tabpanel_id, panel_id = self.single_panel, category = self.category, shift=self.shift)
+        
+        s = bpy.context.scene
+        tabpanel = getattr(bpy.types, self.tabpanel_id )    
+        plist = s.panelSpaces[tabpanel.bl_space_type][tabpanel.bl_region_type]
+        
+        #if not self.shift:
+        for p in plist:
+            pdata = s.panelData[p.realID]
+            if (p.orig_category == self.category):
+                pdata.activated_category = True
+            else:
+                pdata.activated_category = False
         return self.execute(context)
 '''        
 class PopupPanel(bpy.types.Operator):
@@ -1650,7 +1661,10 @@ def createSceneTabData():
                 item.region = p.bl_region_type
                 if hasattr(p, 'bl_context'):
                     item.context = p.bl_context
-                item.context = p.bl_region_type
+                if hasattr(p, 'orig_category'):
+                    item.category = p.orig_category
+                
+                #item.context = p.bl_region_type
             
             
             if hasattr(p, 'bl_category'):# and not (p.bl_region_type == 'UI' and p.bl_space_type == 'VIEW_3D'): #additional checks for Archimesh only!

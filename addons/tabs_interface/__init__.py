@@ -38,7 +38,7 @@ def smartPoll(cls, context):
     
     if USE_DEFAULT_POLL:
         return polled
-    print( ' smart poll', cls.realID)
+    #print( ' smart poll', cls.realID)
     item = bpy.context.scene.panelData.get(cls.realID)
     
     if prefs.enable_disabling:
@@ -1363,7 +1363,11 @@ class ActivateModifier(bpy.types.Operator):
         ob = bpy.context.active_object
         if not self.shift:
             ob.active_modifiers.clear()
-        if self.modifier_name not in ob.active_modifiers:
+        
+        
+        if self.shift and self.modifier_name in ob.active_modifiers:
+            ob.active_modifiers.remove(self.modifier_name)
+        elif self.modifier_name not in ob.active_modifiers:
             ob.active_modifiers.append(self.modifier_name)
         return {'FINISHED'}
         
@@ -1387,7 +1391,10 @@ class ActivateConstraint(bpy.types.Operator):
         ob = bpy.context.active_object
         if not self.shift:
             ob.active_constraints.clear()
-        if self.constraint_name not in ob.active_constraints:
+        
+        if self.shift and self.constraint_name in ob.active_constraints:
+            ob.active_constraints.remove(self.constraint_name)
+        elif self.constraint_name not in ob.active_constraints:
             ob.active_constraints.append(self.constraint_name)
         return {'FINISHED'}
         
@@ -1412,8 +1419,12 @@ class ActivatePoseBoneConstraint(bpy.types.Operator):
         pb = bpy.context.pose_bone
         if not self.shift:
             pb.active_constraints.clear()
-        if self.constraint_name not in pb.active_constraints:
+        
+        if self.shift and self.constraint_name in pb.active_constraints:
+            pb.active_constraints.remove(self.constraint_name)
+        elif self.constraint_name not in pb.active_constraints:
             pb.active_constraints.append(self.constraint_name)
+        
         return {'FINISHED'}
         
     def invoke(self, context, event):
@@ -1648,7 +1659,7 @@ def createSceneTabData():
             if not hasattr(p, 'realID') or s.panelData.get(p.realID) == None or p not in s.panelSpaces[p.bl_space_type][p.bl_region_type]:
                 processpanels.append(p)
         else:
-            bpy.types.Scene.panelIDs.remove(pname)
+            bpy.types.Scene.panelIDs.pop(pname)
     if len(processpanels)>0:
          buildTabDir(processpanels)
     for pname in bpy.types.Scene.panelIDs:
@@ -1770,8 +1781,8 @@ def scene_update_handler(scene):
         
 def register():
     
-    bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
-    bpy.utils.register_class(VIEW3D_PT_transform)#we need this panel :()
+    #bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
+    #bpy.utils.register_class(VIEW3D_PT_transform)#we need this panel :()
 
     
     bpy.utils.register_class(PanelUp)
@@ -1826,8 +1837,8 @@ def unregister():
             
         fixOriginalPanel(panel)
         
-    bpy.utils.unregister_class(VIEW3D_PT_Transform)
-    bpy.utils.unregister_class(VIEW3D_PT_transform)
+   # bpy.utils.unregister_class(VIEW3D_PT_Transform)
+    #bpy.utils.unregister_class(VIEW3D_PT_transform)
     
     
     

@@ -20,6 +20,7 @@ from tabs_interface import panel_order
 
 
 _update_tabs = []
+#_update_pdata = []
 _update_categories = []
 _extra_activations = []
 USE_DEFAULT_POLL = False #Pie menu editor compatibility
@@ -40,7 +41,9 @@ def smartPoll(cls, context):
         return polled
     #print( ' smart poll', cls.realID)
     item = bpy.context.scene.panelData.get(cls.realID)
-    
+    #if item == None:
+    #    _update_pdata.append(cls.realID)
+    #    return polled
     if prefs.enable_disabling:
         if prefs.disable_PROPERTIES and context.area.type == 'PROPERTIES':
             return polled
@@ -224,6 +227,7 @@ def buildTabDir(panels):
    
     #print('called buildtabdir')
     for panel in panels:
+        
         if hasattr(panel, 'bl_space_type'):
             st = panel.bl_space_type
             if st!= 'USER_PREFERENCES' and st!= 'INFO':
@@ -239,14 +243,14 @@ def buildTabDir(panels):
                     if spaces[st].get(rt)==None:
                         spaces[st][rt] = []
                 
-                    if not hasattr(panel, 'realID'):
-                        processPanelForTabs(panel)
+                    #if not hasattr(panel, 'realID'):
+                    processPanelForTabs(panel)
                     #if len(panels)<10:
                     #    print('newly found panel' , panel)
                     if panel not in spaces[st][rt]:
                         spaces[st][rt].append(panel)
                         #print(panel)
-                            
+                    print(panel.bl_rna.identifier)        
     for sname in spaces:
         space =spaces[sname]
         for rname in space:
@@ -992,7 +996,8 @@ def getFilteredTabs(self,context):
         
         else:# panel.bl_label!= '':# and panel.bl_label!= 'Influence' and panel.bl_label!= 'Mapping': #these were crashing. not anymore.
             polled = True
-            
+            if not panel.is_registered:#somehow it can happen between updates, so putting this here too.
+                polled = False
             #first  filter context and category before doing eval and getting actual panel object. still using  fo data.
             if hasattr(panel, 'bl_context'): 
                 pctx = panel.bl_context.upper()
@@ -1653,13 +1658,20 @@ def createSceneTabData():
     s = bpy.context.scene
     #print('handler')
     processpanels = []
+    
+    removepanels = []
     for pname in bpy.types.Scene.panelIDs:
         if hasattr(bpy.types, pname):
             p = getattr(bpy.types, pname)
             if not hasattr(p, 'realID') or s.panelData.get(p.realID) == None or p not in s.panelSpaces[p.bl_space_type][p.bl_region_type]:
                 processpanels.append(p)
+    
         else:
-            bpy.types.Scene.panelIDs.pop(pname)
+            removepanels.append(pname)
+    
+    for pname in removepanels:#can't pop during iteration, doing afterwards. 
+        bpy.types.Scene.panelIDs.pop(pname)
+    
     if len(processpanels)>0:
          buildTabDir(processpanels)
     for pname in bpy.types.Scene.panelIDs:
@@ -1754,7 +1766,7 @@ def scene_update_handler(scene):
         sc = s['tabs_update_counter'] = 0
         
     s['tabs_update_counter']+=1
-    if sc>200 or first:# this should be replaced by better detecting if registrations might have changed.
+    if sc>100 or first:# this should be replaced by better detecting if registrations might have changed.
         s['tabs_update_counter'] = 0
        #t = time.time()
         

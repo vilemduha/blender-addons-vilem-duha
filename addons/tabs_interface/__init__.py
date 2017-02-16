@@ -250,7 +250,7 @@ def buildTabDir(panels):
                     if panel not in spaces[st][rt]:
                         spaces[st][rt].append(panel)
                         #print(panel)
-                    print(panel.bl_rna.identifier)        
+                    #print(panel.bl_rna.identifier)        
     for sname in spaces:
         space =spaces[sname]
         for rname in space:
@@ -1600,7 +1600,7 @@ def updateDisabling(self, context):
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
-    original_panels = bpy.props.BoolProperty(name = 'Default blender panels', description = '', default=True)
+    original_panels = bpy.props.BoolProperty(name = 'Default blender panels', description = '', default=False)
     fixed_width = bpy.props.BoolProperty(name = 'Grid layout', default=True)
     fixed_columns = bpy.props.BoolProperty(name = 'Fixed number of colums', default=True)
     columns_properties = bpy.props.IntProperty(name = 'Columns in property window', default=3, min = 1)

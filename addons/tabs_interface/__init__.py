@@ -1,4 +1,4 @@
-
+#test
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
@@ -1718,7 +1718,7 @@ def createSceneTabData():
     
     for w in bpy.context.window_manager.windows:
         for a in w.screen.areas:
-            if a.type!='INFO':
+            if a.type != 'INFO' and a.type != 'OUTLINER':
                 for r in a.regions:
                     override = {'window': w, 'screen': w.screen, 'area': a, 'region' : r}
                     bpy.ops.view2d.scroll_up(override, deltax=0, deltay=5000)

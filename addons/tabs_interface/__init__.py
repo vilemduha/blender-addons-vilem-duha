@@ -1,4 +1,3 @@
-#test
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
@@ -389,7 +388,7 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
             else:
                 drawtext = t
             tw = getApproximateFontStringWidth(drawtext)
-            if enable_hiding and prefs.hiding: tw += iconwidth
+            if enable_hiding and prefs.hiding : tw += iconwidth
             if i == 0 and tabpanel!= None and prefs.enable_folding:
                 tw += iconwidth
                 split.prop(tabpanel,'show' , icon_only = True, icon = 'DOWNARROW_HLT' , emboss = False)
@@ -409,7 +408,7 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
             else:
                 drawtext = t
                 tw = getApproximateFontStringWidth(drawtext)
-                if rows ==0 and enable_hiding: #draw hiding mode icon here
+                if rows ==0 and enable_hiding and prefs.show_hiding_icon : #draw hiding mode icon here
                     if prefs.hiding:
                         tw += iconwidth
                 if context.space_data.type == 'VIEW_3D' and context.region.type == 'TOOLS':#TOOLBAR draws differnt buttons...
@@ -444,12 +443,12 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
             #if lastsplit_restspace-iconwidth>0:
                 #split = lastsplit.split((lastsplit_restspace - iconwidth)/lastsplit_restspace, align = False)
             #split = split.split()
-            
-            if prefs.hiding:
-                icon = 'RESTRICT_VIEW_ON'
-            else:
-                icon = 'RESTRICT_VIEW_OFF'
-            firstrow.prop(prefs,'hiding' , icon_only = True, icon=icon, emboss = not prefs.emboss)
+            if prefs.show_hiding_icon:
+                if prefs.hiding:
+                    icon = 'RESTRICT_VIEW_ON'
+                else:
+                    icon = 'RESTRICT_VIEW_OFF'
+                firstrow.prop(prefs,'hiding' , icon_only = True, icon=icon, emboss = not prefs.emboss)
             
     else:# GRID  layout
         w = w - margin
@@ -530,11 +529,12 @@ def drawTabsLayout(self, context, layout, tabpanel = None, operator_name = 'wm.a
                             #print(ratio, lastsplit)
                             split = row.split( ratio , align = True)
                             row = split.split(align = True)
-                        if prefs.hiding:
-                            icon = 'RESTRICT_VIEW_ON'
-                        else:
-                            icon = 'RESTRICT_VIEW_OFF'
-                        row.prop(prefs,'hiding' , icon_only = True, icon=icon , emboss = not prefs.emboss)
+                        if prefs.show_hiding_icon:
+                            if prefs.hiding:
+                                icon = 'RESTRICT_VIEW_ON'
+                            else:
+                                icon = 'RESTRICT_VIEW_OFF'
+                            row.prop(prefs,'hiding' , icon_only = True, icon=icon , emboss = not prefs.emboss)
                 ti = 0
                 rows+=1
                 lastsplit = 0
@@ -1612,6 +1612,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
     scale_y = bpy.props.FloatProperty(name = 'vertical scale of tabs', default=1)
     reorder_panels = bpy.props.BoolProperty(name = 'allow reordering panels (developer tool only)', default=False)
     hiding = bpy.props.BoolProperty(name = 'Enable panel hiding', description = 'switch to/from hiding mode', default=False)
+    show_hiding_icon = bpy.props.BoolProperty(name = 'Enable hiding icon', description = "Disable this if you just don't want that little eye in each window tab area.", default=True)
     enable_folding = bpy.props.BoolProperty(name = 'Enable tab panel folding icon', description = 'switch to/from hiding mode', default=False)
     enable_disabling = bpy.props.BoolProperty(name = 'Enable tab panel disable for areas', description = 'switch to/from hiding mode', default=False, update = updateDisabling)
     disable_TOOLBAR = bpy.props.BoolProperty(name = 'Disable tabs in toolbar regions', description = 'switch to/from hiding mode', default=False, update = updateDisabling)
@@ -1641,6 +1642,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
             layout.prop(self, "scale_y")
         layout.prop(self, "original_panels")
         layout.prop(self, "enable_folding")
+        layout.prop(self, "show_hiding_icon")
         layout.prop(self, "enable_disabling")
         if self.enable_disabling:
             b = layout.box()
@@ -1718,7 +1720,7 @@ def createSceneTabData():
     
     for w in bpy.context.window_manager.windows:
         for a in w.screen.areas:
-            if a.type != 'INFO' and a.type != 'OUTLINER':
+            if a.type!='INFO':
                 for r in a.regions:
                     override = {'window': w, 'screen': w.screen, 'area': a, 'region' : r}
                     bpy.ops.view2d.scroll_up(override, deltax=0, deltay=5000)

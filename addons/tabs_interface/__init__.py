@@ -1244,7 +1244,13 @@ class ActivatePanel(bpy.types.Operator):
         
         if not self.shift:
             for p in plist:
-                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and (not hasattr(apanel,'bl_context') or (hasattr(p, 'bl_context') and p.bl_context==apanel.bl_context)) and (p.orig_category == apanel.orig_category):
+                c1 = hasattr(apanel,'bl_context')
+                c2 = hasattr(p,'bl_context')
+                if c1 and c2:
+                    context_nonsame = p.bl_context==apanel.bl_context
+                else:
+                    context_nonsame = True
+                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and context_nonsame and (p.orig_category == apanel.orig_category):
                     #this condition does : check region, space
                     #                        same context - mainly property window
                     #                       same category - mainly toolbar. This makes it possible to have active tabs inside categories and not having them all display panels. magic!
@@ -1259,6 +1265,9 @@ class ActivatePanel(bpy.types.Operator):
             #this is also allready obsolete? not yet so much?
             #if self.category!= '':
             #    s.panelTabData[self.tabpanel_id]['active_tab_'+self.category] = self.panel_id
+        #reactivate the category, this is when category wasn't initialized so active category is first category.
+        
+        s.panelTabData[self.tabpanel_id].active_category = self.category
 
         return {'FINISHED'}
         

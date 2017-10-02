@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
-    "version": (1, 3),
+    "version": (1, 4),
     "blender": (2, 78, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",

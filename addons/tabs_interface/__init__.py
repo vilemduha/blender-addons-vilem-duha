@@ -14,9 +14,8 @@ import bpy,os, math, string, random, time
 import inspect
 import bpy, bpy_types
 from bpy.app.handlers import persistent
-from tabs_interface.panel_order import spaces
 from tabs_interface import panel_order 
-
+import copy #for deepcopy dicts
 
 _update_tabs = []
 #_update_pdata = []
@@ -200,11 +199,11 @@ def getPanelIDs():
         
 def buildTabDir(panels):
     print('rebuild tabs ', len(panels))
-   
+    #disabled reading from scene, 
     if hasattr(bpy.types.Scene, 'panelSpaces'):
         spaces =  bpy.types.Scene.panelSpaces
     else:
-        spaces = panel_order.spaces.copy()
+        spaces = copy.deepcopy(panel_order.spaces)
         for sname in spaces:
             if sname != 'USER_PREFERENCES' and sname!= 'INFO':
                 space = spaces[sname]
@@ -219,9 +218,9 @@ def buildTabDir(panels):
                             if panel:
                                 processPanelForTabs(panel)
                                 nregion.append(panel)
-                            #else:    
-                             #   print('non existing panel ' + str(p))
-                        
+                            else:    
+                                print('non existing panel ' + str(p))
+                                #nregion.append(panel)
                     space[rname] = nregion
    
     #print('called buildtabdir')
@@ -1186,6 +1185,7 @@ class WritePanelOrder(bpy.types.Operator):
     
     
     def execute(self, context):
+        state_before = copy.deepcopy(panel_order.spaces)
         ps = bpy.types.Scene.panelSpaces
         f = open('panelSpaces.py','w')
         nps={}
@@ -1202,7 +1202,27 @@ class WritePanelOrder(bpy.types.Operator):
                     nregion.append(p.realID)
                 #nregion.sort()
                 #space[r] = nregion
-                
+        #try to append panels that were not open(addons e.t.c.) so we can save sorting for ALL addons :)
+        #print(state_before)
+        lastp = ''
+        for s in state_before:
+            space = state_before[s]
+            for r in space:
+                region = space[r]
+                for p in region:
+                    if p not in nps[s][r]:
+                        if nps[s][r].count(lastp)>0:
+                            idx = nps[s][r].index(lastp)
+                            nps[s][r].insert(idx+1,p)
+                            print('insert', p)
+                            print(region)
+                        else:
+                            #print('write',p)
+                            nps[s][r].append(p)
+                            print('append', p)
+                            print(region)
+                    lastp = p
+        
         ddef = str(nps) 
         ddef = ddef.replace('},','},\n    ')
         ddef = ddef.replace("],",'],\n    ' )

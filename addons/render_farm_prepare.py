@@ -121,17 +121,17 @@ def bakeCurveSoftbodies():
 def make_local():
     s=bpy.context.scene
     for ob in s.objects:
-        
+        pass;
 
 def bakeDrivers():
-    if "Drivers in File" in bpy.data.texts:
-        text = bpy.data.texts["Drivers in File"]
+    if "Drivers in File" not in bpy.data.texts:
+        text = bpy.data.texts.new("Drivers in File")
     else:
         text = bpy.data.texts["Drivers in File"]
     text.clear()
 
     all_drivers = []
-    
+    dlastvalues = []
 
     collections = ["scenes","objects","meshes","materials","textures","speakers","worlds","curves","armatures","particles","lattices","shape_keys","lamps","cameras"]
     text.write("-"*70 + "\n")
@@ -168,14 +168,17 @@ def bakeDrivers():
                         pp = "%s[%d]"%(pp,idx)
                     text.write('bpy.data.%s["%s"]%s  (%s)\n' % (col,ob.name, pp, driver.driver.expression) )
                     all_drivers.append(['bpy.data.%s["%s"]' % (col,ob.name) , pp])
+                    #dlastvalues.append(1000000000000)
     s = bpy.context.scene
     if s.node_tree != None:
         if s.node_tree.animation_data != None:
             for d in bpy.context.scene.node_tree.animation_data.drivers:
                 all_drivers.append(['bpy.context.scene.node_tree' ,d.data_path])
+                
                 #print(d.evaluate(1))
                 #print(d.evaluate(10))
     print(all_drivers)
+    
     for f in range(s.frame_start, s.frame_end):
         print(' baking drivers frame ', str(f))
         s.frame_set(f)
@@ -194,10 +197,11 @@ def bakeDrivers():
             value = prop
             print(f,value, datablock)
             datablock.keyframe_insert(dp[1], frame = f)
+            
         #d.convert_to_keyframes(s.frame_start, s.frame_end)
     
   
-
+bakeDrivers()
 
 def main(context):
               
@@ -217,18 +221,10 @@ def main(context):
     #first save - if there's error in the script, I could fuck up my file by saving accidentaly after running it
     bpy.ops.wm.save_as_mainfile(filepath=nn, compress=False)
 
-    r=s.render
-    r.resolution_percentage=100
-    r.use_simplify=False
-    #s.world.light_settings.samples=15
-    #r.use_antialiasing=True
-    i=r.image_settings
-    i.file_format='PNG'
-    i.color_mode='RGBA'
-    i.color_depth='8'
-    #r.use_overwrite=False
     
-    make_local()
+    
+    #make_local()
+    bakeDrivers()
     '''
     bakeCurveSoftbodies()  
     fix_duplis()

@@ -17,6 +17,8 @@ from bpy.app.handlers import persistent
 from tabs_interface import panel_order 
 import copy #for deepcopy dicts
 
+DEBUG = False
+
 _update_tabs = []
 #_update_pdata = []
 _update_categories = []
@@ -198,7 +200,8 @@ def getPanelIDs():
 
         
 def buildTabDir(panels):
-    print('rebuild tabs ', len(panels))
+    if DEBUG:
+        print('rebuild tabs ', len(panels))
     #disabled reading from scene, 
     if hasattr(bpy.types.Scene, 'panelSpaces'):
         spaces =  bpy.types.Scene.panelSpaces
@@ -219,7 +222,8 @@ def buildTabDir(panels):
                                 processPanelForTabs(panel)
                                 nregion.append(panel)
                             else:    
-                                print('non existing panel ' + str(p))
+                                if DEBUG: 
+                                    print('non existing panel ' + str(p))
                                 #nregion.append(panel)
                     space[rname] = nregion
    
@@ -984,7 +988,9 @@ def getFilteredTabs(self,context):
     categories = []
     #print(panellist)
     for panel in panellist:
-     
+        #if panel.bl_label =='Options' and hasattr(panel, 'bl_context'):
+        #    print('got hrere')
+         #   print(panel.bl_context, panel.bl_category)
         #if panel.realID =='VIEW3D_PT_tools_mask_texture':
         #    print('its here!!!! before filter')
         #if panel.bl_label == 'Collision':
@@ -1000,8 +1006,7 @@ def getFilteredTabs(self,context):
             #first  filter context and category before doing eval and getting actual panel object. still using  fo data.
             if hasattr(panel, 'bl_context'): 
                 pctx = panel.bl_context.upper()
-                if panel.bl_context == 'particle':
-                    pctx = 'PARTICLES'
+                
                 
                 if hasattr(context.space_data, 'context'):
                     if not pctx == context.space_data.context:
@@ -1035,7 +1040,8 @@ def getFilteredTabs(self,context):
                         pctx = 'PAINT_TEXTURE'
                     elif panel.bl_context == 'objectmode':
                         pctx = 'OBJECT'
-                    
+                    if panel.bl_context == 'particlemode':
+                        pctx = 'PARTICLE'
                     
                     if not pctx == context.mode:
                         polled =False
@@ -1049,7 +1055,7 @@ def getFilteredTabs(self,context):
             if hasattr(panel, 'bl_category'): 
                 if panel.bl_category != tab_panel_category:
                     polled = False
-                
+            #print(polled)
             if polled:
                 possible_tabs.append(panel)
     #print('possible', len(possible_tabs))   
@@ -1267,7 +1273,7 @@ class ActivatePanel(bpy.types.Operator):
                 c1 = hasattr(apanel,'bl_context')
                 c2 = hasattr(p,'bl_context')
                 if c1 and c2:
-                    context_nonsame = p.bl_context==apanel.bl_context
+                    context_nonsame = p.bl_context == apanel.bl_context
                 else:
                     context_nonsame = True
                 if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and context_nonsame and (p.orig_category == apanel.orig_category):
@@ -1685,7 +1691,8 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
  
 
 def createSceneTabData():
-    print('create tab panel data')
+    if DEBUG:
+        print('create tab panel data')
     s = bpy.context.scene
     #print('handler')
     processpanels = []

@@ -1006,6 +1006,8 @@ def getFilteredTabs(self,context):
             #first  filter context and category before doing eval and getting actual panel object. still using  fo data.
             if hasattr(panel, 'bl_context'): 
                 pctx = panel.bl_context.upper()
+                if panel.bl_context == 'particle':# property particle panels
+                        pctx = 'PARTICLES'
                 
                 
                 if hasattr(context.space_data, 'context'):
@@ -1040,9 +1042,9 @@ def getFilteredTabs(self,context):
                         pctx = 'PAINT_TEXTURE'
                     elif panel.bl_context == 'objectmode':
                         pctx = 'OBJECT'
-                    if panel.bl_context == 'particlemode':
+                    if panel.bl_context == 'particlemode':# Tools particle panels
                         pctx = 'PARTICLE'
-                    
+                        
                     if not pctx == context.mode:
                         polled =False
                         

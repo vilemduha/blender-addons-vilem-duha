@@ -2,7 +2,7 @@ bl_info = {
     "name": "Tabs interface",
     "author": "Vilem Duha",
     "version": (1, 6),
-    "blender": (2, 79, 0),
+    "blender": (2, 80, 0),
     "location": "Everywhere(almost)",
     "description": "Blender tabbed.",
     "warning": "",
@@ -17,7 +17,7 @@ from bpy.app.handlers import persistent
 from tabs_interface import panel_order
 import copy  # for deepcopy dicts
 
-DEBUG = False
+DEBUG = True
 
 _update_tabs = []
 # _update_pdata = []
@@ -25,6 +25,9 @@ _update_categories = []
 _extra_activations = []
 USE_DEFAULT_POLL = False  # Pie menu editor compatibility
 _counter = 0
+
+IGNORE_SPACES = ('TOPBAR', 'INFO', 'PREFERENCES')
+IGNORE_REGIONS = ('HEADER', 'NAVIGATION_BAR', 'TOOLS')
 
 
 @classmethod
@@ -39,7 +42,7 @@ def yesPoll(cls, context):
 
 @classmethod
 def smartPoll(cls, context):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     polled = cls.opoll(context)
 
     if USE_DEFAULT_POLL:
@@ -56,6 +59,13 @@ def smartPoll(cls, context):
             return polled
         if prefs.disable_UI and context.region.type == 'UI':
             return polled
+    if item == None:
+        return False
+
+    if hasattr(cls, 'bl_parent_id'):
+        # TODO the parent should be written on initialization
+        parent = eval('bpy.types.' + cls.bl_parent_id)
+        polled = parent.poll(context) and polled
 
     return ((item.activated and item.activated_category) or item.pin) and polled and item.show and (
         prefs.original_panels)
@@ -63,12 +73,13 @@ def smartPoll(cls, context):
 
 def drawHeaderPin(cls, context):
     layout = cls.layout
-    pd = bpy.context.scene.panelData[cls.realID]
-    if pd.pin:
-        icon = 'PINNED'
-    else:
-        icon = 'UNPINNED'
-    layout.prop(bpy.context.scene.panelData[cls.realID], 'pin', icon_only=True, icon=icon, emboss=False)
+    if hasattr(bpy.context.scene, 'panelData') and bpy.context.scene.panelData.get(cls.realID) is not None:
+        pd = bpy.context.scene.panelData[cls.realID]
+        if pd.pin:
+            icon = 'PINNED'
+        else:
+            icon = 'UNPINNED'
+        layout.prop(bpy.context.scene.panelData[cls.realID], 'pin', icon_only=True, icon=icon, emboss=False)
     if hasattr(cls, 'orig_draw_header'):
         cls.orig_draw_header(context)
 
@@ -84,9 +95,9 @@ def processPanelForTabs(panel):
             if not hasattr(panel, 'orig_category'):
                 panel.orig_category = panel.bl_category
             panel.bl_category = 'Tools'
-        elif panel.bl_space_type == 'VIEW_3D' and panel.bl_region_type == 'TOOLS':
-            panel.bl_category = 'Tools'
-            panel.orig_category = 'Misc'
+        # elif panel.bl_space_type == 'VIEW_3D' and panel.bl_region_type == 'TOOLS':
+        #     panel.bl_category = 'Tools'
+        #     panel.orig_category = 'Misc'
         else:
             panel.bl_category = 'Tools'
             panel.orig_category = 'Tools'
@@ -107,7 +118,10 @@ def processPanelForTabs(panel):
         if hasattr(panel, 'bl_options'):
             if 'DEFAULT_CLOSED' in panel.bl_options:
                 panel.bl_options.remove('DEFAULT_CLOSED')
-        bpy.utils.register_class(panel)
+        try:
+            bpy.utils.register_class(panel)
+        except Exception as e:
+            print(e)
 
 
 def fixOriginalPanel(tp_name):
@@ -162,29 +176,30 @@ NOCOPY_PANEL_PROPS = ['__class__', '__contains__', '__delattr__', '__delitem__',
 
 class tabSetups(bpy.types.PropertyGroup):
     '''stores data for tabs'''
-    tabsenum = bpy.props.EnumProperty(name='Post processor',
-                                      items=[('tabID', 'tabb', 'tabbiiiieeee')])
-    show = bpy.props.BoolProperty(name="show", default=True)  # , update = updatePin)
-    active_tab = bpy.props.StringProperty(name="Active tab", default="Machine")
-    active_category = bpy.props.StringProperty(name="Active category", default="None")
+    tabsenum: bpy.props.EnumProperty(name='Post processor',
+                                     items=[('tabID', 'tabb', 'tabbiiiieeee')])
+    show: bpy.props.BoolProperty(name="show", default=True)  # , update = updatePin)
+    active_tab: bpy.props.StringProperty(name="Active tab", default="Machine")
+    active_category: bpy.props.StringProperty(name="Active category", default="None")
 
 
 class tabCategoryData(bpy.types.PropertyGroup):
     # ''stores data for categories''
-    show = bpy.props.BoolProperty(name="show", default=True)
+    show: bpy.props.BoolProperty(name="show", default=True)
 
 
 class panelData(bpy.types.PropertyGroup):
     '''stores data for panels'''
 
-    pin = bpy.props.BoolProperty(name="pin", default=False)  # , update = updatePin)
-    show = bpy.props.BoolProperty(name="show", default=True)
-    activated = bpy.props.BoolProperty(name="activated", default=False)
-    activated_category = bpy.props.BoolProperty(name="activated category", default=True)
-    category = bpy.props.StringProperty(name="category", default='Tools')
-    space = bpy.props.StringProperty(name="space", default="")
-    region = bpy.props.StringProperty(name="region", default="")
-    context = bpy.props.StringProperty(name="context", default="")
+    pin: bpy.props.BoolProperty(name="pin", default=False)  # , update = updatePin)
+    show: bpy.props.BoolProperty(name="show", default=True)
+    activated: bpy.props.BoolProperty(name="activated", default=False)
+    activated_category: bpy.props.BoolProperty(name="activated category", default=True)
+    category: bpy.props.StringProperty(name="category", default='Tools')
+    parent: bpy.props.StringProperty(name="parent", default='')
+    space: bpy.props.StringProperty(name="space", default="")
+    region: bpy.props.StringProperty(name="region", default="")
+    context: bpy.props.StringProperty(name="context", default="")
 
 
 def getlabel(panel):
@@ -195,6 +210,7 @@ DONT_USE = ['DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints']
 
 
 def getPanelIDs():
+    ''' rebuilds panel ID's dictionary '''
     s = bpy.types.Scene
     if not hasattr(s, 'panelIDs'):
         s.panelIDs = {}
@@ -207,7 +223,13 @@ def getPanelIDs():
     for tp_name in typedir:
         if tp_name.find('_tabs') == -1 and tp_name not in DONT_USE:  # and tp_name.find('NODE_PT_category_')==-1
             tp = getattr(bpy.types, tp_name)
-            if tp == panel_tp or not issubclass(tp, panel_tp) or tp.bl_space_type == 'USER_PREFERENCES':
+            # if hasattr(tp, 'bl_region_type'):
+            #     print('region type', tp.bl_region_type, tp.bl_space_type)
+            if tp == panel_tp or \
+                    not issubclass(tp, panel_tp) or tp.bl_space_type == 'PREFERENCES' or \
+                    hasattr(tp, 'bl_region_type') and tp.bl_region_type == 'HEADER':
+                # if hasattr(tp, 'bl_region_type'):
+                #     print('ignored region type', tp.bl_region_type, tp.bl_space_type)
                 continue
 
             # if not (hasattr(tp, 'bl_options') and 'HIDE_HEADER' in tp.bl_options):
@@ -235,31 +257,32 @@ def buildTabDir(panels):
     else:
         spaces = copy.deepcopy(panel_order.spaces)
         for sname in spaces:
-            if sname != 'USER_PREFERENCES' and sname != 'INFO':
+            if sname not in IGNORE_SPACES:
                 space = spaces[sname]
 
                 for rname in space:
-                    nregion = []
-                    region = space[rname]
+                    if rname not in IGNORE_REGIONS and not (rname == 'WINDOW' and sname == 'VIEW_3D'):
+                        nregion = []
+                        region = space[rname]
 
-                    for p in region:
-                        if type(p) == str:
-                            panel = getattr(bpy_types.bpy_types, p, None)
-                            if panel:
-                                processPanelForTabs(panel)
-                                nregion.append(panel)
-                            else:
-                                if DEBUG:
-                                    print('non existing panel ' + str(p))
-                                # nregion.append(panel)
-                    space[rname] = nregion
+                        for p in region:
+                            if type(p) == str:
+                                panel = getattr(bpy_types.bpy_types, p, None)
+                                if panel:
+                                    processPanelForTabs(panel)
+                                    nregion.append(panel)
+                                else:
+                                    if DEBUG:
+                                        print('non existing panel ' + str(p))
+                                    # nregion.append(panel)
+                        space[rname] = nregion
 
     # print('called buildtabdir')
     for panel in panels:
 
         if hasattr(panel, 'bl_space_type'):
             st = panel.bl_space_type
-            if st != 'USER_PREFERENCES' and st != 'INFO':
+            if st not in IGNORE_SPACES:
                 # print((st))
                 # if panel.bl_label == 'Collision':
                 # print('collision in tabdir')
@@ -267,24 +290,27 @@ def buildTabDir(panels):
                     spaces[st] = {}  # [panel]
 
                 if hasattr(panel, 'bl_region_type'):
-                    rt = panel.bl_region_type
-                    # print(rt)
-                    if spaces[st].get(rt) == None:
-                        spaces[st][rt] = []
 
-                    # if not hasattr(panel, 'realID'):
-                    processPanelForTabs(panel)
-                    # if len(panels)<10:
-                    #    print('newly found panel' , panel)
-                    if panel not in spaces[st][rt]:
-                        spaces[st][rt].append(panel)
-                        # print(panel)
-                    # print(panel.bl_rna.identifier)
+                    rt = panel.bl_region_type
+                    if rt not in IGNORE_REGIONS and not (rt == 'WINDOW' and st == 'VIEW_3D'):
+                        # print(rt)
+                        if spaces[st].get(rt) == None:
+                            spaces[st][rt] = []
+
+                        # if not hasattr(panel, 'realID'):
+                        processPanelForTabs(panel)
+                        # if len(panels)<10:
+                        #    print('newly found panel' , panel)
+                        if panel not in spaces[st][rt]:
+                            spaces[st][rt].append(panel)
+                            # print(panel)
+                        # print(panel.bl_rna.identifier)
     for sname in spaces:
         space = spaces[sname]
         for rname in space:
             region = space[rname]
             for p in region:
+                # print(p)
                 # print(p.bl_rna.identifier , p.is_registered)
                 if not p.is_registered:
                     print('non registered', p)
@@ -309,7 +335,7 @@ def getPanels(getspace, getregion):
 def drawEnable(self, context):
     layout = self.layout
     row = layout.row()
-    row.label('Enable:')
+    row.label(text='Enable:')
 
 
 def layoutActive(self, context):
@@ -336,7 +362,7 @@ def drawNone(self, context):
 
 
 def tabRow(layout):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     row = layout.row(align=prefs.fixed_width)  # not prefs.fixed_width)
     if not prefs.fixed_width:
         row.scale_y = prefs.scale_y
@@ -396,7 +422,7 @@ def getApproximateFontStringWidth(st):
 def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activate_panel', texts=[], ids=[], tdata=[],
                    active='', enable_hiding=False):  # tdata=[],
     '''Creates and draws actual layout of tabs'''
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     w = context.region.width
     margin = 18
     if prefs.box:
@@ -452,7 +478,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
             restspace = restspace - tw
             if restspace > 0:
 
-                split = split.split(tw / oldrestspace, align=splitalign)
+                split = split.split(factor=tw / oldrestspace, align=splitalign)
 
             else:
                 drawtext = t
@@ -466,7 +492,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
                 oldrestspace = baserest
                 restspace = baserest - tw
                 row = tabRow(layout)
-                split = row.split(tw / oldrestspace, align=splitalign)
+                split = row.split(factor=tw / oldrestspace, align=splitalign)
 
             if enable_hiding and prefs.hiding:
                 split.prop(tdata[i], 'show', text=drawtext)
@@ -490,13 +516,13 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
         if lastsplit != None:
             # split = lastsplit
             # if lastsplit_restspace-iconwidth>0:
-            # split = lastsplit.split((lastsplit_restspace - iconwidth)/lastsplit_restspace, align = False)
+            # split = lastsplit.split( factor = (lastsplit_restspace - iconwidth)/lastsplit_restspace, align = False)
             # split = split.split()
             if prefs.show_hiding_icon:
                 if prefs.hiding:
-                    icon = 'RESTRICT_VIEW_ON'
+                    icon = 'VISIBLE_IPO_OFF'
                 else:
-                    icon = 'RESTRICT_VIEW_OFF'
+                    icon = 'VISIBLE_IPO_ON'
                 firstrow.prop(prefs, 'hiding', icon_only=True, icon=icon, emboss=not prefs.emboss)
 
     else:  # GRID  layout
@@ -527,7 +553,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
         for t, id in zip(texts, ids):
             if tabpanel != None and i == 0 and prefs.enable_folding:
                 ratio, lastsplit = nextSplit(regwidth=w, width=iconwidth, last=0)
-                split = row.split(ratio, align=True)
+                split = row.split(factor=ratio, align=True)
 
                 split.prop(tabpanel, 'show', icon_only=True, icon='DOWNARROW_HLT', emboss=False)
                 row = split.split(align=True)
@@ -545,7 +571,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
                 if ratio == 1:
                     split = row
                 else:
-                    split = row.split(ratio, align=True)
+                    split = row.split(factor=ratio, align=True)
 
                 drawn = False
 
@@ -574,13 +600,13 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
                         # print('last eye')
                         ratio, lastsplit = nextSplit(regwidth=w, width=-iconwidth, last=lastsplit)
                         # print(ratio, lastsplit)
-                        split = row.split(ratio, align=True)
+                        split = row.split(factor=ratio, align=True)
                         row = split.split(align=True)
                     if prefs.show_hiding_icon:
                         if prefs.hiding:
-                            icon = 'RESTRICT_VIEW_ON'
+                            icon = 'VISIBLE_IPO_OFF'
                         else:
-                            icon = 'RESTRICT_VIEW_OFF'
+                            icon = 'VISIBLE_IPO_ON'
                         row.prop(prefs, 'hiding', icon_only=True, icon=icon, emboss=not prefs.emboss)
                 ti = 0
                 rows += 1
@@ -589,7 +615,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
 
         if ti != 0:
             while ti < wtabcount:
-                row.label('')
+                row.label(text='')
                 ti += 1
     return oplist
 
@@ -609,7 +635,7 @@ def drawUpDown(self, context, tabID):
 
 
 def mySeparator(layout):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
 
     if not prefs.box:
         layout.separator()
@@ -626,14 +652,16 @@ def drawFoldHeader(self, context, tabpanel_data):
     else:
         icon = 'RIGHTARROW'
     row.prop(tabpanel_data, 'show', icon_only=True, icon=icon, emboss=False)
-    row.label(self.bl_label)
+    row.label(text=self.bl_label)
 
 
 def drawTabs(self, context, plist, tabID):
     space = context.space_data.type
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     s = bpy.context.scene
     # r = bpy.context.region
+    if not hasattr(s, 'panelTabData'):
+        return []
     tabpanel_data = s.panelTabData.get(tabID)
     panel_data = s.panelData
     if tabpanel_data == None:
@@ -667,8 +695,6 @@ def drawTabs(self, context, plist, tabID):
                 # print( ' extra draw', p)
                 top_panel = p  # draw_panels.append(p)
                 plist.remove(p)
-
-    # print('wau')
 
     for p in plist:
         if hasattr(p,
@@ -759,35 +785,64 @@ def drawTabs(self, context, plist, tabID):
             hasactivetab = True
 
     if len(plist) > 1:  # property windows
-        texts = []
-        ids = []
-        tdata = []
-        tabpanels = []
+        # Draw panels here.
+        # these are levels of subpanels(2.8 madness)
+        texts = [[], [], [], []]
+        ids = [[], [], [], []]
+        tdata = [[], [], [], []]
+        tabpanels = [[], [], [], []]
+        active = [[], [], [], []]
 
         # row=tabRow(maincol)
-        active = []
+        maxlevel = 0
         for p in plist:
+
             if p.bl_label == 'Preview':
                 preview = p
             else:
-                texts.append(p.bl_label)
-                ids.append(p.realID)
-                tabpanels.append(p)
-                tdata.append(panel_data[p.realID])
-                active.append(panel_data[p.realID].activated)
-        # print(texts)
+                visible = True
+
+                if not hasattr(p, 'bl_parent_id'):
+                    level = 0
+                    print(level, p)
+
+                else:
+                    ppanel = eval('bpy.types.' + p.bl_parent_id)
+                    print('source', p)
+                    print(level, ppanel)
+                    level = 1
+                    visible = visible and panel_data[ppanel.realID].activated
+                    while visible and hasattr(ppanel, 'bl_parent_id'):
+                        level += 1
+                        #print( panel_data[ppanel.parent])
+                        ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
+                        # if hasattr(ppanel, 'bl_parent_id'):
+                        visible = visible and panel_data[ppanel.realID].activated
+
+                maxlevel = max(maxlevel, level)
+                if visible:
+                    texts[level].append(p.bl_label)
+                    ids[level].append(p.realID)
+                    tabpanels[level].append(p)
+                    tdata[level].append(panel_data[p.realID])
+                    active[level].append(panel_data[p.realID].activated)
+        print(texts)
+        # Draw all tabs including subtabs. Maaaadneeeesss.
         if tabpanel_data.show:
             if len(categories) == 1:
                 tabpanel = tabpanel_data
             else:
-                tabpanel = None  # roaoao at gmail.com
-            tabops = drawTabsLayout(self, context, maincol, tabpanel=tabpanel, operator_name='wm.activate_panel',
-                                    texts=texts, ids=ids, tdata=tdata, active=active, enable_hiding=True)
-            for op, p in zip(tabops, tabpanels):
-                if op != None:
-                    op.panel_id = p.realID
-                    op.tabpanel_id = tabID
-                    op.category = active_category
+                tabpanel = None
+            for level in range(0, maxlevel + 1):
+                print(f'drawing level {level} from {maxlevel}')
+                tabops = drawTabsLayout(self, context, maincol, tabpanel=tabpanel, operator_name='wm.activate_panel',
+                                        texts=texts[level], ids=ids[level], tdata=tdata[level], active=active[level],
+                                        enable_hiding=False)
+                for op, p in zip(tabops, tabpanels[level]):
+                    if op != None:
+                        op.panel_id = p.realID
+                        op.tabpanel_id = tabID
+                        op.category = active_category
 
     if len(draw_panels) == 0 and len(
             plist) > 0:  # and len(categories)== 1)or (len(categories)=>1 and len ) :# or (len(draw_panels == 0) and len(plist)>0):
@@ -808,7 +863,7 @@ def drawTabs(self, context, plist, tabID):
 
 
 def modifiersDraw(self, context):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     ob = context.object
     layout = self.layout
     layout.operator_menu_enum("object.modifier_add", "type")
@@ -854,7 +909,7 @@ def modifiersDraw(self, context):
 
 
 def constraintsDraw(self, context):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
 
     ob = context.object
 
@@ -903,7 +958,7 @@ def constraintsDraw(self, context):
 
 
 def boneConstraintsDraw(self, context):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
 
     pb = context.pose_bone
     layout = self.layout
@@ -972,7 +1027,7 @@ def drawPanels(self, context, draw_panels):
                 # else:
                 #    drawPanel.draw_header(fakeself,context)
 
-            row.label(drawPanel.bl_label)
+            row.label(text=drawPanel.bl_label)
 
             pd = bpy.context.scene.panelData[drawPanel.realID]
             if pd.pin:
@@ -1050,7 +1105,7 @@ def getFilteredTabs(self, context):
             if not panel.is_registered:  # somehow it can happen between updates, so putting this here too.
                 polled = False
             # first  filter context and category before doing eval and getting actual panel object. still using  fo data.
-            if hasattr(panel, 'bl_context') and panel.bl_context != '': # UV packmaster has bl_context = '' #shhh...
+            if hasattr(panel, 'bl_context'):
                 pctx = panel.bl_context.upper()
                 if panel.bl_context == 'particle':  # property particle panels
                     pctx = 'PARTICLES'
@@ -1111,7 +1166,7 @@ def getFilteredTabs(self, context):
 
 
 def drawRegionUI(self, context):  # , getspace, getregion, tabID):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     # print(dir(self))
 
     tabID = self.bl_idname
@@ -1131,10 +1186,10 @@ class PanelUp(bpy.types.Operator):
     bl_label = 'panel up'
     bl_options = {'REGISTER'}
 
-    tabpanel_id = bpy.props.StringProperty(name="tab panel name",
-                                           default='you didnt assign panel to the operator in ui def')
-    panel_id = bpy.props.StringProperty(name="panel name",
-                                        default='')
+    tabpanel_id: bpy.props.StringProperty(name="tab panel name",
+                                          default='you didnt assign panel to the operator in ui def')
+    panel_id: bpy.props.StringProperty(name="panel name",
+                                       default='')
 
     def execute(self, context):
         # unhide_panel(self.tabpanel_id)
@@ -1182,10 +1237,10 @@ class PanelDown(bpy.types.Operator):
     bl_label = 'panel down'
     bl_options = {'REGISTER'}
 
-    tabpanel_id = bpy.props.StringProperty(name="tab panel name",
-                                           default=' you didnt assign panel to the operator in ui def')
-    panel_id = bpy.props.StringProperty(name="panel name",
-                                        default='')
+    tabpanel_id: bpy.props.StringProperty(name="tab panel name",
+                                          default=' you didnt assign panel to the operator in ui def')
+    panel_id: bpy.props.StringProperty(name="panel name",
+                                       default='')
 
     def execute(self, context):
         # unhide_panel(self.tabpanel_id)
@@ -1236,43 +1291,50 @@ class WritePanelOrder(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        state_before = copy.deepcopy(panel_order.spaces)
+        state_before = {}  # copy.deepcopy(panel_order.spaces)
         ps = bpy.types.Scene.panelSpaces
         f = open('panelSpaces.py', 'w')
         nps = {}
         for s in ps:
-            space = ps[s]
-            nps[s] = {}
-            for r in space:
-                nps[s][r] = []
-                nregion = nps[s][r]
-                region = space[r]
+            if s not in IGNORE_SPACES:
+                space = ps[s]
+                nps[s] = {}
+                for r in space:
+                    if r not in IGNORE_REGIONS and not (r == 'WINDOW' and s == 'VIEW_3D'):
 
-                for p in region:
-                    # nregion.append('bpy.types.'+p.realID)
-                    nregion.append(p.realID)
-                # nregion.sort()
-                # space[r] = nregion
+                        nps[s][r] = []
+                        nregion = nps[s][r]
+                        region = space[r]
+
+                        for p in region:
+                            # nregion.append('bpy.types.'+p.realID)
+                            nregion.append(p.realID)
+                        # nregion.sort()
+                        # space[r] = nregion
         # try to append panels that were not open(addons e.t.c.) so we can save sorting for ALL addons :)
         # print(state_before)
         lastp = ''
         for s in state_before:
+
             space = state_before[s]
-            for r in space:
-                region = space[r]
-                for p in region:
-                    if p not in nps[s][r]:
-                        if nps[s][r].count(lastp) > 0:
-                            idx = nps[s][r].index(lastp)
-                            nps[s][r].insert(idx + 1, p)
-                            print('insert', p)
-                            print(region)
-                        else:
-                            # print('write',p)
-                            nps[s][r].append(p)
-                            print('append', p)
-                            print(region)
-                    lastp = p
+            if s not in IGNORE_SPACES:
+                for r in space:
+                    # ignore horizontal regions:
+                    if r not in IGNORE_REGIONS and not (r == 'WINDOW' and s == 'VIEW_3D'):
+                        region = space[r]
+                        for p in region:
+                            if p not in nps[s][r]:
+                                if nps[s][r].count(lastp) > 0:
+                                    idx = nps[s][r].index(lastp)
+                                    nps[s][r].insert(idx + 1, p)
+                                    # print('insert', p)
+                                    # print(region)
+                                else:
+                                    # print('write',p)
+                                    nps[s][r].append(p)
+                                    # print('append', p)
+                                    # print(region)
+                            lastp = p
 
         ddef = str(nps)
         ddef = ddef.replace('},', '},\n    ')
@@ -1294,17 +1356,17 @@ class ActivatePanel(bpy.types.Operator):
     bl_label = 'activate panel'
     bl_options = {'REGISTER'}
 
-    tabpanel_id = bpy.props.StringProperty(name="tab panel name",
-                                           default='PROPERTIES_PT_tabs')
-    panel_id = bpy.props.StringProperty(name="panel name",
-                                        default='')
-    category = bpy.props.StringProperty(name="panel name",
-                                        default='')
-    shift = bpy.props.BoolProperty(name="shift",
-                                   default=False)
+    tabpanel_id: bpy.props.StringProperty(name="tab panel name",
+                                          default='PROPERTIES_PT_tabs')
+    panel_id: bpy.props.StringProperty(name="panel name",
+                                       default='')
+    category: bpy.props.StringProperty(name="panel name",
+                                       default='')
+    shift: bpy.props.BoolProperty(name="shift",
+                                  default=False)
 
     def execute(self, context):
-        prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+        prefs = bpy.context.preferences.addons["tabs_interface"].preferences
         tabpanel = getattr(bpy.types, self.tabpanel_id, None)
         s = bpy.context.scene
         s.panelTabData[self.tabpanel_id].active_tab = self.panel_id
@@ -1320,11 +1382,21 @@ class ActivatePanel(bpy.types.Operator):
                 c1 = hasattr(apanel, 'bl_context')
                 c2 = hasattr(p, 'bl_context')
                 if c1 and c2:
-                    context_nonsame = p.bl_context == apanel.bl_context
+                    context_same = p.bl_context == apanel.bl_context
                 else:
-                    context_nonsame = True
-                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and context_nonsame and (
-                        p.orig_category == apanel.orig_category):
+                    context_same = True
+
+                parent1 = hasattr(apanel, 'bl_parent_id')
+                parent2 = hasattr(p, 'bl_parent_id')
+                if parent1 and parent2:
+                    parents_same = p.bl_parent_id == apanel.bl_parent_id
+                elif parent1 or parent2:
+                    parents_same = False
+                else:
+                    parents_same = True
+
+                if p.bl_region_type == panel.bl_region_type and p.bl_space_type == panel.bl_space_type and context_same and (
+                        p.orig_category == apanel.orig_category) and parents_same:
                     # this condition does : check region, space
                     #                        same context - mainly property window
                     #                       same category - mainly toolbar. This makes it possible to have active tabs inside categories and not having them all display panels. magic!
@@ -1343,6 +1415,7 @@ class ActivatePanel(bpy.types.Operator):
 
         s.panelTabData[self.tabpanel_id].active_category = self.category
 
+        scene_update_handler()
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -1360,17 +1433,17 @@ class ActivateCategory(bpy.types.Operator):
     bl_label = 'activate panel category'
     bl_options = {'REGISTER'}
 
-    tabpanel_id = bpy.props.StringProperty(name="tab panel name",
-                                           default='PROPERTIES_PT_tabs')
-    category = bpy.props.StringProperty(name="category",
-                                        default='ahoj')
-    single_panel = bpy.props.StringProperty(name="category",
-                                            default='')
-    shift = bpy.props.BoolProperty(name="shift",
-                                   default=False)
+    tabpanel_id: bpy.props.StringProperty(name="tab panel name",
+                                          default='PROPERTIES_PT_tabs')
+    category: bpy.props.StringProperty(name="category",
+                                       default='ahoj')
+    single_panel: bpy.props.StringProperty(name="category",
+                                           default='')
+    shift: bpy.props.BoolProperty(name="shift",
+                                  default=False)
 
     def execute(self, context):
-        prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+        prefs = bpy.context.preferences.addons["tabs_interface"].preferences
         # unhide_panel(self.tabpanel_id)
         tabpanel = getattr(bpy.types, self.tabpanel_id)
         s = bpy.context.scene
@@ -1379,7 +1452,7 @@ class ActivateCategory(bpy.types.Operator):
         return {'FINISHED'}
 
     def invoke(self, context, event):
-        prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+        prefs = bpy.context.preferences.addons["tabs_interface"].preferences
         if event.shift:  # for Multi-selection self.obj = context.selected_objects
             self.shift = True
             # print('shift')
@@ -1410,9 +1483,9 @@ class PopupPanel(bpy.types.Operator):
     bl_options = {'REGISTER'}
     
     
-    tabpanel_id = bpy.props.StringProperty(name="tab panel name",
+    tabpanel_id : bpy.props.StringProperty(name="tab panel name",
                 default='PROPERTIES_PT_tabs')
-    panel_id = bpy.props.StringProperty(name="panel name",
+    panel_id : bpy.props.StringProperty(name="panel name",
                 default='')
     
      
@@ -1448,10 +1521,10 @@ class ActivateModifier(bpy.types.Operator):
     bl_label = 'activate modifier'
     bl_options = {'REGISTER'}
 
-    modifier_name = bpy.props.StringProperty(name="Modifier name",
-                                             default='')
-    shift = bpy.props.BoolProperty(name="shift",
-                                   default=False)
+    modifier_name: bpy.props.StringProperty(name="Modifier name",
+                                            default='')
+    shift: bpy.props.BoolProperty(name="shift",
+                                  default=False)
 
     def execute(self, context):
         ob = bpy.context.active_object
@@ -1479,7 +1552,7 @@ class ActivateConstraint(bpy.types.Operator):
     bl_label = 'activate constraint'
     bl_options = {'REGISTER'}
 
-    constraint_name = bpy.props.StringProperty(name="Constraint name", default='')
+    constraint_name: bpy.props.StringProperty(name="Constraint name", default='')
 
     def execute(self, context):
         ob = bpy.context.active_object
@@ -1507,8 +1580,8 @@ class ActivatePoseBoneConstraint(bpy.types.Operator):
     bl_label = 'activate constraint'
     bl_options = {'REGISTER'}
 
-    constraint_name = bpy.props.StringProperty(name="Constraint name",
-                                               default='')
+    constraint_name: bpy.props.StringProperty(name="Constraint name",
+                                              default='')
 
     def execute(self, context):
         pb = bpy.context.pose_bone
@@ -1534,7 +1607,7 @@ class ActivatePoseBoneConstraint(bpy.types.Operator):
 class TabsPanel:
     @classmethod
     def poll(cls, context):
-        prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+        prefs = bpy.context.preferences.addons["tabs_interface"].preferences
         if prefs.enable_disabling:
             if prefs.disable_PROPERTIES and context.area.type == 'PROPERTIES':
                 return False
@@ -1551,7 +1624,7 @@ def createPanels():
     s = bpy.types.Scene
     definitions = []
     panelIDs = []
-    pdef = "class %s(TabsPanel,bpy.types.Panel):\n    bl_space_type = '%s'\n    bl_region_type = '%s'\n    %s\n    COMPAT_ENGINES = {'BLENDER_RENDER', }\n    bl_label = 'Tabs'\n    bl_options = {'HIDE_HEADER'}\n    bl_idname = '%s'\n    draw = drawRegionUI\n"
+    pdef = "class %s(TabsPanel,bpy.types.Panel):\n    bl_space_type = '%s'\n    bl_region_type = '%s'\n    bl_options = {'HIDE_HEADER'}\n    %s\n    bl_label = 'Tabs'\n    bl_idname = '%s'\n    draw = drawRegionUI\n"
     for sname in spaces:
         space = spaces[sname]
         for rname in space:
@@ -1574,7 +1647,7 @@ def createPanels():
                 #   cname = 'Tools'
                 # else:
                 #    cname = 'Default'
-                cname = 'Tools'
+                cname = 'Tools'  # tools
                 cnamefixed = cname.upper();
                 cnamefixed = cnamefixed.replace(' ', '_')
                 cnamefixed = cnamefixed.replace('/', '_')
@@ -1660,7 +1733,7 @@ class VIEW3D_PT_Transform(bpy.types.Panel):
 
 
 def updateDisabling(self, context):
-    prefs = bpy.context.user_preferences.addons["tabs_interface"].preferences
+    prefs = bpy.context.preferences.addons["tabs_interface"].preferences
     s = bpy.context.scene
     spaces = s.panelSpaces
     panel_data = s.panelData
@@ -1686,49 +1759,53 @@ def updateDisabling(self, context):
                 region = space[rname]
                 for p in region:
                     if hasattr(p, 'orig_category'):
-                        p.bl_category = 'Tools'
+                        # p.bl_category = 'Tools'
+                        # try:# TODO fix this
                         bpy.utils.unregister_class(p)
                         bpy.utils.register_class(p)
+                        # except:
+                        #     print('fail enable disable ',p)
 
 
 class TabInterfacePreferences(bpy.types.AddonPreferences):
     bl_idname = "tabs_interface"
     # here you define the addons customizable props
-    original_panels = bpy.props.BoolProperty(name='Default blender panels', description='', default=False)
-    fixed_width = bpy.props.BoolProperty(name='Grid layout', default=True)
-    fixed_columns = bpy.props.BoolProperty(name='Fixed number of colums', default=True)
-    columns_properties = bpy.props.IntProperty(name='Columns in property window', default=3, min=1)
-    columns_modifiers = bpy.props.IntProperty(name='Columns in modifiers and constraints', default=3, min=1)
-    columns_rest = bpy.props.IntProperty(name='Columns in side panels', default=2, min=1)
-    emboss = bpy.props.BoolProperty(name='Invert tabs drawing', default=True)
-    # align_rows = bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
-    box = bpy.props.BoolProperty(name='Draw box around tabs', default=True)
-    scale_y = bpy.props.FloatProperty(name='vertical scale of tabs', default=1)
-    reorder_panels = bpy.props.BoolProperty(name='allow reordering panels (developer tool only)', default=False)
-    hiding = bpy.props.BoolProperty(name='Enable panel hiding', description='switch to/from hiding mode', default=False)
-    show_hiding_icon = bpy.props.BoolProperty(name='Enable hiding icon',
-                                              description="Disable this if you just don't want that little eye in each window tab area.",
-                                              default=True)
-    enable_folding = bpy.props.BoolProperty(name='Enable tab panel folding icon',
-                                            description='switch to/from hiding mode', default=False)
-    enable_disabling = bpy.props.BoolProperty(name='Enable tab panel disable for areas',
-                                              description='switch to/from hiding mode', default=False,
-                                              update=updateDisabling)
-    disable_TOOLBAR = bpy.props.BoolProperty(name='Disable tabs in toolbar regions',
-                                             description='switch to/from hiding mode', default=False,
+    original_panels: bpy.props.BoolProperty(name='Default blender panels', description='', default=False)
+    fixed_width: bpy.props.BoolProperty(name='Grid layout', default=True)
+    fixed_columns: bpy.props.BoolProperty(name='Fixed number of colums', default=True)
+    columns_properties: bpy.props.IntProperty(name='Columns in property window', default=3, min=1)
+    columns_modifiers: bpy.props.IntProperty(name='Columns in modifiers and constraints', default=3, min=1)
+    columns_rest: bpy.props.IntProperty(name='Columns in side panels', default=2, min=1)
+    emboss: bpy.props.BoolProperty(name='Invert tabs drawing', default=True)
+    # align_rows : bpy.props.BoolProperty(name = 'Align tabs in rows', default=True)
+    box: bpy.props.BoolProperty(name='Draw box around tabs', default=True)
+    scale_y: bpy.props.FloatProperty(name='vertical scale of tabs', default=1)
+    reorder_panels: bpy.props.BoolProperty(name='allow reordering panels (developer tool only)', default=False)
+    hiding: bpy.props.BoolProperty(name='Enable panel hiding', description='switch to/from hiding mode', default=False)
+    show_hiding_icon: bpy.props.BoolProperty(name='Enable hiding icon',
+                                             description="Disable this if you just don't want that little eye in each window tab area.",
+                                             default=True)
+    enable_folding: bpy.props.BoolProperty(name='Enable tab panel folding icon',
+                                           description='switch to/from hiding mode', default=False)
+
+    enable_disabling: bpy.props.BoolProperty(name='Enable tab panel disable for areas',
+                                             description='switch to/from hiding mode', default=True,
                                              update=updateDisabling)
-    disable_UI = bpy.props.BoolProperty(name='Disable tabs in UI regions', description='switch to/from hiding mode',
-                                        default=False, update=updateDisabling)
-    disable_PROPERTIES = bpy.props.BoolProperty(name='Disable properties area',
-                                                description='switch to/from hiding mode', default=False,
-                                                update=updateDisabling)
-    disable_MODIFIERS = bpy.props.BoolProperty(name='Disable for modifiers and constraints',
+    disable_TOOLBAR: bpy.props.BoolProperty(name='Disable tabs in toolbar regions',
+                                            description='switch to/from hiding mode', default=True,
+                                            update=updateDisabling)
+    disable_UI: bpy.props.BoolProperty(name='Disable tabs in UI regions', description='switch to/from hiding mode',
+                                       default=False, update=updateDisabling)
+    disable_PROPERTIES: bpy.props.BoolProperty(name='Disable properties area',
                                                description='switch to/from hiding mode', default=False,
                                                update=updateDisabling)
+    disable_MODIFIERS: bpy.props.BoolProperty(name='Disable for modifiers and constraints',
+                                              description='switch to/from hiding mode', default=False,
+                                              update=updateDisabling)
 
-    panelData = bpy.props.CollectionProperty(type=panelData)
-    panelTabData = bpy.props.CollectionProperty(type=tabSetups)
-    categories = bpy.props.CollectionProperty(type=tabCategoryData)
+    panelData: bpy.props.CollectionProperty(type=panelData)
+    panelTabData: bpy.props.CollectionProperty(type=tabSetups)
+    categories: bpy.props.CollectionProperty(type=tabCategoryData)
 
     # here you specify how they are drawn
     def draw(self, context):
@@ -1782,28 +1859,39 @@ def createSceneTabData():
 
     if len(processpanels) > 0:
         buildTabDir(processpanels)
+    # print('create scene tab data')
     for pname in bpy.types.Scene.panelIDs:
+        # print('pname')
         if hasattr(bpy.types, pname):
+            # print('go on ')
+            # print(p.realID)
             p = getattr(bpy.types, pname)
-            if not p.realID in bpy.context.scene.panelData:
-                item = bpy.context.scene.panelData.add()
-                item.name = p.realID
-                item.space = p.bl_space_type
-                item.region = p.bl_region_type
-                if hasattr(p, 'bl_context'):
-                    item.context = p.bl_context
-                if hasattr(p, 'orig_category'):
-                    item.category = p.orig_category
+            # TODO following condition should not check for realID...this should be there allready
+            if hasattr(p, 'realID'):
+                if not p.realID in bpy.context.scene.panelData:
 
-                # item.context = p.bl_region_type
+                    item = bpy.context.scene.panelData.add()
+                    item.name = p.realID
+                    item.space = p.bl_space_type
+                    item.region = p.bl_region_type
+                    if hasattr(p, 'bl_context'):
+                        item.context = p.bl_context
+                    if hasattr(p, 'orig_category'):
+                        item.category = p.orig_category
+                    if hasattr(p, 'bl_parent_id'):
+                        item.parent = p.bl_parent_id
 
-            if hasattr(p,
-                       'bl_category'):  # and not (p.bl_region_type == 'UI' and p.bl_space_type == 'VIEW_3D'): #additional checks for Archimesh only!
-                c = s.categories.get(p.orig_category)
-                if c == None:
-                    # print(p.orig_category)
-                    c = s.categories.add();
-                    c.name = p.orig_category
+                    # item.context = p.bl_region_type
+
+                if hasattr(p,
+                           'bl_category'):  # and not (p.bl_region_type == 'UI' and p.bl_space_type == 'VIEW_3D'): #additional checks for Archimesh only!
+                    c = s.categories.get(p.orig_category)
+                    if c == None:
+                        # print(p.orig_category)
+                        c = s.categories.add();
+                        c.name = p.orig_category
+            else:
+                print('unprocessed without realID', p)
 
     while len(_update_tabs) > 0:
         pt = _update_tabs.pop()
@@ -1815,6 +1903,7 @@ def createSceneTabData():
         if s.panelTabData.get(pname) == None:
             item = s.panelTabData.add()
             item.name = pname
+
     while len(_update_categories) > 0:
         cname = _update_categories.pop()
         c = s.categories.get(p.bl_category)
@@ -1867,41 +1956,44 @@ def scene_load_handler(scene):
 
 
 @persistent
-def scene_update_handler(scene):
-    global _counter
-    if _counter == 20:
-        _counter = 0
-        s = bpy.context.scene
-        sc = s.get('tabs_update_counter')
-        first = False
-        if sc == None:
-            first = True
-            sc = s['tabs_update_counter'] = 0
+def scene_update_handler():
+    s = bpy.context.scene
 
-        s['tabs_update_counter'] += 1
-        if sc > 100 or first:  # this should be replaced by better detecting if registrations might have changed.
-            s['tabs_update_counter'] = 0
-            # t = time.time()
+    s = bpy.context.scene
+    sc = s.get('tabs_update_counter')
+    first = False
+    if sc == None:
+        first = True
+        sc = s['tabs_update_counter'] = 0
 
-            btypeslen = len(dir(bpy.types))
-            if btypeslen != s.get('bpy_types_len') or first:
-                updatePanels()
-            s['bpy_types_len'] = btypeslen
-            if len(_update_tabs) > 0:
-                createSceneTabData()
-            '''
-            allt = s.get('updatetime')
-            tadd = time.time()-t
-            if allt== None:
-                s['updatetime']=tadd
-            else:
-                s['updatetime']+=tadd
-            '''
-            overrideDrawFunctions()
+    s['tabs_update_counter'] += 1
+    # if sc > 5 or first:  # this should be replaced by better detecting if registrations might have changed.
+    s['tabs_update_counter'] = 0
+    # t = time.time()
+
+    btypeslen = len(dir(bpy.types))
+    if btypeslen != s.get('bpy_types_len') or first:
+        updatePanels()
+    s['bpy_types_len'] = btypeslen
+
+    overrideDrawFunctions()
+
+    if len(_update_tabs) > 0 or first:
+        createSceneTabData()
+
     while len(_extra_activations) > 0:
         p = _extra_activations.pop()
         bpy.context.scene.panelData[p.realID].activated = True
-    _counter += 1
+
+    return 1
+
+
+def every_2_seconds():
+    while not tasks_queue.empty():
+        print('as a task:   ')
+        fstring = tasks_queue.get()
+        eval(fstring)
+    return 2.0
 
 
 def register():
@@ -1931,7 +2023,8 @@ def register():
     bpy.types.Scene.categories = bpy.props.CollectionProperty(type=tabCategoryData)
 
     bpy.app.handlers.load_post.append(scene_load_handler)
-    bpy.app.handlers.scene_update_pre.append(scene_update_handler)
+    bpy.app.handlers.load_post.append(scene_update_handler)
+    bpy.app.timers.register(scene_update_handler)
 
     allpanels = getPanelIDs()
     bpy.types.Scene.panelSpaces = buildTabDir(allpanels)
@@ -1943,8 +2036,11 @@ def register():
         exec(d)
     for pname in panelIDs:
         # print('register ', pname)
+        # print(pname)
         p = eval(pname)
+        # print(dir(p))
         bpy.utils.register_class(eval(pname))
+
         # pt = eval('bpy.types.'+pname)
 
 
@@ -1985,7 +2081,9 @@ def unregister():
     bpy.utils.unregister_class(TabInterfacePreferences)
 
     bpy.app.handlers.load_post.remove(scene_load_handler)
-    bpy.app.handlers.scene_update_pre.remove(scene_update_handler)
+    bpy.app.handlers.load_post.remove(scene_update_handler)
+    bpy.app.timers.unregister(scene_update_handler)
+
     del bpy.types.Scene.panelSpaces
     del bpy.types.Scene.panelIDs
 

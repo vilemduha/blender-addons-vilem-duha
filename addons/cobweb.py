@@ -179,7 +179,10 @@ class CobwebPaint(bpy.types.Operator):
             # allow navigation
             return {'PASS_THROUGH'}
         if event.type == 'LEFTMOUSE':
-            self.drawing = not self.drawing
+            if event.value == 'PRESS':
+                self.drawing = True
+            else:
+                self.drawing = False
             # print(dir(event))
             # print(event.value)
         elif event.type == 'MOUSEMOVE':
@@ -218,8 +221,6 @@ class CobwebPaint(bpy.types.Operator):
 
             return {'FINISHED'}
 
-            return {'RUNNING_MODAL'}
-            # return {'CANCELLED'}
         elif event.type in {'RIGHTMOUSE', 'ESC'}:
             # self.hits=[]
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
@@ -510,7 +511,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     empty = bpy.context.active_object
     # empty.parent = obj
     empty.name = 'cobweb_helper'
-    empty.hide_viewport = True
+
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
@@ -518,10 +519,14 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     loc = obj.location.copy()
     loc.y += 10
     empty.location = loc
+    empty.select_set(True)
+    bpy.ops.object.parent_set(type='OBJECT', keep_transform=True)
 
+    empty.hide_viewport = True
     bpy.ops.object.modifier_add(type='SCREW')
     bpy.context.object.modifiers["Screw"].object = empty
     angle = 2 * math.pi * radius / (10 * 2 * math.pi)
+    bpy.context.object.modifiers["Screw"].angle = angle
     bpy.context.object.modifiers["Screw"].angle = angle
     bpy.context.object.modifiers["Screw"].steps = 2
     bpy.context.object.modifiers["Screw"].render_steps = 2
@@ -530,6 +535,8 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     if not enable_viewport_rendering:
         bpy.context.object.modifiers["Screw"].show_viewport = False
         bpy.context.object.modifiers["Solidify"].show_viewport = False
+
+
     if bpy.data.materials.get('cobweb') == None:
         m = bpy.data.materials.new('cobweb')
         m.use_nodes = True
@@ -807,13 +814,13 @@ class CobwebSettings(bpy.types.PropertyGroup):
         name="connections per strand",
         description="number of connections(multiplied with pointcount!)",
         min=1, max=300,
-        default=30,
+        default=5,
     )
     drop_amount: FloatProperty(
         name="Gravity",
         description="",
         min=0.000001, max=1.00000,
-        default=0.001,
+        default=0.01,
         precision=6,
     )
     smooth_iterations: IntProperty(

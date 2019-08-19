@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cobweb",
     "author": "Vilem Duha",
-    "version": (2, 0),
+    "version": (2, 1),
     "blender": (2, 80, 0),
     "location": "View3D > Add > Mesh > Cobweb",
     "description": "Adds a generative cobweb",
@@ -506,7 +506,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
         bpy.context.object.modifiers["Cloth"].settings.vertex_group_mass = "Group"
     # make renderable
 
-    bpy.ops.object.empty_add(type='PLAIN_AXES', view_align=False, location=(0, 0, 0))
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
     empty = bpy.context.active_object
     # empty.parent = obj
     empty.name = 'cobweb_helper'
@@ -596,7 +596,7 @@ def finish_cobweb(rtype,radius):
             bpy.context.object.modifiers["Cloth"].settings.vertex_group_mass = "Group"
         loc = cw.location.copy()
         loc.y+=10
-        bpy.ops.object.empty_add(type='PLAIN_AXES', view_align=False, location=loc)
+        bpy.ops.object.empty_add(type='PLAIN_AXES',  location=loc)
         empty = bpy.context.active_object
         empty.parent = cw
         cw.select = True
@@ -622,7 +622,7 @@ class RegenerateCobweb(bpy.types.Operator):
 
     def execute(self, context):
         s = bpy.context.scene
-        s.update()
+        bpy.context.view_layer.update()
         ob = bpy.context.active_object
         if ob.name[:6] == 'cobweb':
             bpy.context.collection.objects.unlink(ob)
@@ -666,7 +666,7 @@ class AddCobweb(bpy.types.Operator):
         default=150,
     )
     pick_close_tries: IntProperty(
-        name="short connection attempts",
+        name="shorter connection attempts",
         description="first round connections try to get closer this amount of times",
         min=1, max=100,
         default=10,
@@ -721,7 +721,7 @@ class AddCobweb(bpy.types.Operator):
     )
 
     def execute(self, context):
-        bpy.context.scene.update()
+        bpy.context.view_layer.update()
 
         generate_cobweb(self.pointcount,
                         self.pick_close_tries,
@@ -786,7 +786,7 @@ class CobwebSettings(bpy.types.PropertyGroup):
         default=150,
     )
     pick_close_tries: IntProperty(
-        name="short connection attempts",
+        name="shorter connection attempts",
         description="first round connections try to get closer this amount of times",
         min=1, max=100,
         default=1,
@@ -848,7 +848,7 @@ class COBWEB_Panel(bpy.types.Panel):
 
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Tools"
+    bl_category = "Create"
 
     # bl_context = "object"
 
@@ -865,9 +865,9 @@ class COBWEB_Panel(bpy.types.Panel):
 
         # if br:
         # cutter preset
-        layout.operator("object.cobweb_add", text="From face selection")
-        layout.separator()
-        layout.separator()
+        # layout.operator("object.cobweb_add", text="From face selection")
+        # layout.separator()
+        # layout.separator()
         layout.operator("object.cobweb_paint", text="Paint")
         layout.operator("object.cobweb_regenerate_painted", text="Regenerate last painted")
 

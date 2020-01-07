@@ -19,15 +19,14 @@
 bl_info = {
     "name": "Auto seam unwrap",
     "author": "Vilem Duha",
-    "version": (1, 0),
-    "blender": (2, 77, 0),
+    "version": (1, 1),
+    "blender": (2, 80, 0),
     "location": "View3D > Mesh > UV Unwrap > Auto Seam Unwrap",
     "description": "Iteratively finds seams, and unwraps selected object. ",
     "warning": "",
     "wiki_url": "",
     "category": "UV",
     }
-
 
 import bpy
 import bmesh
@@ -1061,7 +1060,6 @@ def seed_with_merge(context, op):
     ob = bpy.context.active_object
 
     me = ob.data
-    me.show_edge_seams = True
     if op.init_seams:
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')

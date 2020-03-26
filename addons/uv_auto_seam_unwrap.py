@@ -851,11 +851,11 @@ def continue_path(v_path, weights):
                 a = v_path.direction.angle(vect2)
             # face angle
             # todo add precalculated curvature weights here!
-            a2 = weights[v2.index]
-            # if len(e2.link_faces) == 2:
-            #     a2 += -e2.calc_face_angle() * .5
-            # else:
-            #     a2 -= 1
+            a2 = 0#abs(weights[v2.index])
+            if len(e2.link_faces) == 2:
+                a2 += -e2.calc_face_angle() * .2
+            else:
+                a2 -= 1
             # print(a,a2)
             edgesort.append([e2, a + a2])
     edgesort.sort(key=second)
@@ -1286,7 +1286,7 @@ def seedIslandsCurvature(context, bm, op):
     i = 0
     topverts = []
     borderverts = []
-    max_top_points = op.seed_points  # max(10, totverts * .03)
+    max_top_points =   max(op.seed_points, totverts * .02)
     consider_percentage = .5  # less creates less topverts
     for vi in range(0, int(totverts * consider_percentage)):
         i = math.floor(vi / 2)
@@ -2331,7 +2331,7 @@ def menu_func(self, context):
     self.layout.operator_context = 'INVOKE_DEFAULT'
 
     # here are four presets, to simplify usage cases
-    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='Autoseam Scan/dyntopo')
+    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Scan/dyntopo - Tiles')
     op.init_seams = True
     op.island_style = 'TILES'
     op.angle_deformation_ratio_threshold = 1.2
@@ -2340,7 +2340,17 @@ def menu_func(self, context):
     op.small_island_threshold = 50
     op.merge_iterations = 0
 
-    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='Autoseam Lowpoly hardsurface')
+    # here are four presets, to simplify usage cases
+    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Scan/dyntopo - Curvature')
+    op.init_seams = True
+    op.island_style = 'CURVATURE'
+    op.angle_deformation_ratio_threshold = 1.2
+    op.area_deformation_ratio_threshold = 1.35
+    op.island_shape_threshold = 4.0
+    op.small_island_threshold = 50
+    op.merge_iterations = 0
+
+    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Lowpoly hardsurface')
     op.init_seams = True
     op.grow_iterations = 6
     op.merge_iterations = 5
@@ -2351,7 +2361,7 @@ def menu_func(self, context):
     op.island_style = 'GROW'
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
-                              text='Autoseam lowpoly organic')
+                              text='AS Lowpoly organic')
     op.init_seams = True
     op.grow_iterations = 6
     op.merge_iterations = 5
@@ -2362,7 +2372,7 @@ def menu_func(self, context):
     op.island_style = 'GROW'
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
-                              text='Autoseam merge islands only')
+                              text='AS Merge Islands')
     op.init_seams = False
     op.merge_iterations = 5
     op.small_island_threshold = 1000

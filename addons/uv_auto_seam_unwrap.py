@@ -93,15 +93,14 @@ def getIslands(bm):
     island_index_dict = {}
     neighbours = {}
     for i, p in enumerate(bm.faces):
-        islands_dict[i] = [p]
+        islands_dict[i] = [p]  # faces and edges
         island_index_dict[i] = i
         n = []
         for e in p.edges:
             for f in e.link_faces:
                 if f != p:
-                    n.append((f.index,e.seam))
-        neighbours[i] = n#face index with seam info
-
+                    n.append((f.index, e.seam))
+        neighbours[i] = n  # face index with seam info
 
     new_faces = [p]
     done_all = False
@@ -109,7 +108,7 @@ def getIslands(bm):
     totfaces = len(bm.faces)
     while not done_all:
         done_one = False
-        for i in range(0,totfaces):
+        for i in range(0, totfaces):
             if done.get(i) is None:
                 had_neighbours = False
                 island1i = island_index_dict[i]
@@ -124,17 +123,21 @@ def getIslands(bm):
                                 island_index_dict[fmove.index] = island1i
                             islands_dict.pop(island2i)
                 if not had_neighbours:
-                     done[i] = True
+                    done[i] = True
         print(done_one, len(islands_dict))
         if not done_one:
             done_all = True
-
 
     islands = list(islands_dict.values())
     islands_fin = []
     for i_faces in islands:
         island = Island()
         island.faces = i_faces
+        # write seams, hope this isn't too slow.
+        for f in i_faces:
+            for e in f.edges:
+                if e.seam:
+                    island.seams.append(e)
         islands_fin.append(island)
     return islands_fin
 
@@ -428,6 +431,8 @@ def testPerimeterRatio(bm, faces, by_seams=True):
     totalarea = 0
     totseams = 0
     totedges = 0
+    if len(faces) == 0:
+        return 1
 
     for f in faces:
         totalarea += f.calc_area()
@@ -782,15 +787,19 @@ def v_has_seams(v):
     return False
 
 
-def v_weight_sorted_edges(v):
+def v_weight_sorted_edges(v, weights=None):
     edges = []
 
     for e in v.link_edges:
-        if len(e.link_faces) == 2:
-            a = e.calc_face_angle_signed()
-            edges.append([e, abs(a)])
+        if weights is not None:
+            v1 = e.other_vert(v)
+            edges.append([e, weights[v1.index]])
         else:
-            edges.append([e, 0])
+            if len(e.link_faces) == 2:
+                a = e.calc_face_angle_signed()
+                edges.append([e, abs(a)])
+            else:
+                edges.append([e, 0])
     edges.sort(key=second)
     eds = []
     for l in edges:
@@ -798,14 +807,14 @@ def v_weight_sorted_edges(v):
     return eds
 
 
-def v_counter_edges(v):
+def v_counter_edges(v, weights=None):
     vects = []
-    weight_sorted_edges = v_weight_sorted_edges(v)
+    weight_sorted_edges = v_weight_sorted_edges(v, weights)
     e1 = weight_sorted_edges[0]
     # e1 = v.link_edges[0]
     vect1 = e1.other_vert(v).co - v.co
     maxangle = -100
-    other_edge = v.link_edges[2]
+    other_edge = v.link_edges[1]
     for e2 in v.link_edges:
         vect2 = e2.other_vert(v).co - v.co
         a = 0
@@ -835,7 +844,7 @@ def continue_edges(v_last, v_new):
     return edges  # [:2]
 
 
-def continue_path(v_path, weights):
+def continue_path(v_path, weights, curvature_influence=0.5):
     '''find a suitable edge to continue the path. Usually tries to go straight.'''
     v_new = v_path.verts[-1]
     v_last = v_path.verts[-2]
@@ -851,9 +860,9 @@ def continue_path(v_path, weights):
                 a = v_path.direction.angle(vect2)
             # face angle
             # todo add precalculated curvature weights here!
-            a2 = 0#abs(weights[v2.index])
+            a2 = 0  # abs(weights[v2.index])
             if len(e2.link_faces) == 2:
-                a2 += -e2.calc_face_angle() * .2
+                a2 += -e2.calc_face_angle() * curvature_influence
             else:
                 a2 -= 1
             # print(a,a2)
@@ -1279,14 +1288,17 @@ def seedIslandsCurvature(context, bm, op):
     normalized_weights = vgroup_weights - minw
     normalized_weights *= 1 / (maxw - minw)
 
+    est_weights = abs(vgroup_weights)
+
     sorted_indices = np.argsort(vgroup_weights)
 
-    # find top points. select the most curved, and if they don't have any selected neighbours yet, these should be the extremities we are looking for. Same from bottom up.
+    # find top points. select the most curved, and if they don't have any selected neighbours yet,
+    # these should be the extremities we are looking for. Same from bottom up.
     print('looking for feature points')
     i = 0
     topverts = []
     borderverts = []
-    max_top_points =   max(op.seed_points, totverts * .02)
+    max_top_points = max(op.seed_points, totverts * .02)
     consider_percentage = .5  # less creates less topverts
     for vi in range(0, int(totverts * consider_percentage)):
         i = math.floor(vi / 2)
@@ -1332,7 +1344,7 @@ def seedIslandsCurvature(context, bm, op):
     v_paths = []
 
     for v in topverts:
-        for e in v_counter_edges(v):
+        for e in v_counter_edges(v, est_weights):
             p = VPath()
             v2 = e.other_vert(v)
             p.verts = [v, v2]
@@ -1353,7 +1365,7 @@ def seedIslandsCurvature(context, bm, op):
             # print(dir(p))
             if p.growing:
                 v1 = p.verts[-1]
-                e = continue_path(p, vgroup_weights)
+                e = continue_path(p, vgroup_weights, curvature_influence=op.curvature_influence)
                 v2 = e.other_vert(v1)
                 if not e.seam:
                     if v_has_seams(v2) or not v_manifold(v2):
@@ -1362,7 +1374,7 @@ def seedIslandsCurvature(context, bm, op):
                     e.seam = True
                     p.verts.append(v2)
                     p.edges.append(e)
-                    p.direction *= 1.0  # enable direction bending
+                    p.direction *= op.keep_direction  # enable direction bending
                     p.direction += v2.co - v1.co
                     p.length += e.calc_length()
                 else:
@@ -1699,6 +1711,84 @@ def testIslandQuality(context, bm, island, op, pass_orig_perimeter_ratio=False, 
     return disqualified, qualityratio;
 
 
+def get_border_seamchunks(island, island2, islandindices):
+    commonseams = 0
+    i2seams = 0
+    for f in island2.faces:
+        f.select = True
+        for e in f.edges:
+            if e.seam:
+                i2seams += 1
+
+    edone = {}
+    seamchunks = []
+    for f in island.faces:
+        for e in f.edges:
+            if e.seam and edone.get(e.index) == None:
+                allsel = True
+                lf = e.link_faces
+
+                for f1 in lf:
+                    if not f1.select:
+                        allsel = False
+
+                if allsel:
+                    allsame = True
+
+                    edone[e.index] = True
+                    iidx = islandindices[lf[0].index]
+                    for f1 in lf:
+                        if islandindices[f1.index] != iidx:
+                            allsame = False
+
+                    if not allsame:
+                        seamchunk = [e]
+                        check = [e]
+                        commonseams += 1
+                        while len(check) > 0:
+                            le = []
+                            e1 = check.pop()
+                            # print(len(check),len(seamchunk))
+                            v1 = e1.verts[
+                                0]  # on crossings we have to split the seams into more segments
+                            v2 = e1.verts[1]
+
+                            for v in e1.verts:
+                                vseams = 0
+                                for e in v.link_edges:
+                                    if e.select and e.seam:
+                                        vseams += 1
+                                if vseams < 3:
+                                    le.extend(v.link_edges)
+
+                            for e2 in le:
+                                if e2.select and e2.seam and edone.get(e2.index) == None:
+                                    allsel = True
+                                    lf = e2.link_faces
+                                    for f2 in lf:
+                                        if not f2.select:
+                                            allsel = False
+
+                                    if allsel:
+                                        allsame = True
+                                        iidx = islandindices[lf[0].index]
+                                        for f2 in lf:
+                                            if islandindices[f2.index] != iidx:
+                                                allsame = False
+                                            # print(islandindices[f2.index],i1idx)
+                                        if not allsame:
+                                            check.append(e2)
+                                            seamchunk.append(e2)
+                                            commonseams += 1
+                                    edone[e2.index] = True
+                        seamchunks.append(seamchunk)
+    for f in island2.faces:
+        f.select = False
+    seamchunks.sort(key=len)
+    seamchunks.reverse()
+    return seamchunks
+
+
 def mergeIslands(context,
                  bm, islands,
                  op):
@@ -1718,41 +1808,46 @@ def mergeIslands(context,
     all = False
     done = {}
     ####filter single-face islands and try to connect them with islands in an optimal way(longest edge gets merged). no overlap check so far.
-    # fal
     # island indices assign the island to the face, effective for knowing which face belongs where.
     islandindices = {}
     islands.sort(key=len)
-    for i, island in enumerate(islands):
-        for f in island.faces:
+    islands_dict = {}
+    tests_done = {}  # to track which was tested with which unsuccessfully
+
+    for i, island1 in enumerate(islands):
+        for f in island1.faces:
             # if i == 1:
             #    f.select=True
+            f.select = False
             islandindices[f.index] = i
-
-    # for f in bm.faces:
-    #    if islandindices.get(f.index) == None:
-    #        print('bad face', f.index)
-    #        f.select=True
-    # fal
+        islands_dict[i] = island1
+        tests_done[i] = []
     print('try to merge small islands')
+
 
     totaltests = 0
     for a in range(0, op.merge_iterations):
         merged = 0
 
+        tests_prepared = []
+        ready_for_test = {}  # dict stores which islands were already touched and shouldn't be before next round
         print(a)
         i1idx = 0
-        while i1idx < len(islands):
-            island = islands[i1idx]
+        for i1idx in islands_dict.keys():
+            island1 = islands_dict[i1idx]
+            if ready_for_test.get(i1idx) == True:
+                continue;
+
             # if len(f.edges)<5:
             # f.select=True
-            if len(island.faces) < op.small_island_threshold:
+            if len(island1.faces) < op.small_island_threshold:
 
                 # find all border islands
                 bislandsidx = []  # just for checks
                 bislands = []
                 i1seams = 0
 
-                for f in island.faces:
+                for f in island1.faces:
                     f.select = True
                     for i, e in enumerate(f.edges):
                         if e.seam:
@@ -1765,214 +1860,119 @@ def mergeIslands(context,
                                         bislandsidx.append(island2idx)
                                         bislands.append([island2idx, True, 1000, 0, 0,
                                                          []])  # index, overlap, ratio, common seams, total seams,erase seams
-                # print(bislands)
-                orig_perimeter_ratio = testPerimeterRatio(bm, island.faces)
 
+                # print(bislands)
+                orig_perimeter_ratio = testPerimeterRatio(bm, island1.faces)
+
+                perimeter_tests = []
+                test_islands = []
+                found_neighbour = False  # only if we find an untested island can we proceed
+                # overzealous test for border islands
                 for islandinfo in bislands:
+
                     island2idx = islandinfo[0]
-                    island2 = islands[island2idx]
-
-                    commonseams = 0
-                    i2seams = 0
-                    for f in island2.faces:
-                        f.select = True
-                        for e in f.edges:
-                            if e.seam:
-                                i2seams += 1
-
-                    '''
-                    #clean inner seams
-                    for f in island:
-                        for e in f.edges:
-                            if e.seam:
-                                i2seams += 1
-                                lf = e.link_faces
-                                if len(lf)>1:
-                                    allsel=True
-                                    for f1 in e.link_faces:
-                                        if not f1.select:
-                                            allsel=False
-                                    if allsel: #remove border seams!
-                                        e.seam=False
-                                        commonseams+=1
-                      '''
-                    # get connecting seam rows
-                    seamchunks = []
-                    edone = {}
-
-                    for f in island.faces:
-                        for e in f.edges:
-                            if e.seam and edone.get(e.index) == None:
-                                allsel = True
-                                lf = e.link_faces
-
-                                for f1 in lf:
-                                    if not f1.select:
-                                        allsel = False
-
-                                if allsel:
-                                    allsame = True
-
-                                    edone[e.index] = True
-                                    iidx = islandindices[lf[0].index]
-                                    for f1 in lf:
-                                        if islandindices[f1.index] != iidx:
-                                            allsame = False
-
-                                    if not allsame:
-                                        seamchunk = [e]
-                                        check = [e]
-                                        commonseams += 1
-                                        while len(check) > 0:
-                                            le = []
-                                            e1 = check.pop()
-                                            # print(len(check),len(seamchunk))
-                                            v1 = e1.verts[
-                                                0]  # on crossings we have to split the seams into more segments
-                                            v2 = e1.verts[1]
-
-                                            for v in e1.verts:
-                                                vseams = 0
-                                                for e in v.link_edges:
-                                                    if e.select and e.seam:
-                                                        vseams += 1
-                                                if vseams < 3:
-                                                    le.extend(v.link_edges)
-
-                                            for e2 in le:
-                                                if e2.select and e2.seam and edone.get(e2.index) == None:
-                                                    allsel = True
-                                                    lf = e2.link_faces
-                                                    for f2 in lf:
-                                                        if not f2.select:
-                                                            allsel = False
-
-                                                    if allsel:
-                                                        allsame = True
-                                                        iidx = islandindices[lf[0].index]
-                                                        for f2 in lf:
-                                                            if islandindices[f2.index] != iidx:
-                                                                allsame = False
-                                                            # print(islandindices[f2.index],i1idx)
-                                                        if not allsame:
-                                                            check.append(e2)
-                                                            seamchunk.append(e2)
-                                                            commonseams += 1
-                                                    edone[e2.index] = True
-                                        seamchunks.append(seamchunk)
-
-                    if len(seamchunks) > 0:
-                        # print('seamchunks',len(seamchunks))
-                        eraseseam = seamchunks[0]
-                        # break
-                        maxlen = 0
-                        if len(seamchunks) > 1:
-                            # print(seamchunks)
-
-                            for sch in seamchunks:
-                                if len(sch) > maxlen:
-                                    eraseseam = sch
-                                    maxlen = len(sch)
-                        commonlength = 0
-                        for e in eraseseam:
-                            # e.select=True
-                            e.seam = False
-                            commonlength += e.calc_length()
-                        newislandfaces = []
-                        newislandfaces.extend(island.faces)
-                        newislandfaces.extend(island2.faces)
-
-                        # now
-                        # f.edges[maxlenidx].seam=False
-
-                        overlap, qualityratio = testIslandQuality(context, bm, newislandfaces, op,
-                                                                  pass_orig_perimeter_ratio=True,
-                                                                  orig_perimeter_ratio=orig_perimeter_ratio)
-                        islandinfo[1] = overlap
-                        islandinfo[2] = qualityratio
-                        islandinfo[3] = commonlength  # commonseams
-                        islandinfo[4] = i2seams
-                        islandinfo[5] = eraseseam
-
-                        # print(islandinfo)
-                        # print(qualityratio)
-                        for f in island2.faces:
+                    # don't test islands already ready for test
+                    if ready_for_test.get(island2idx) or island2idx in tests_done[i1idx]:
+                        perimeter_tests.append(1000)
+                        test_islands.append(([], []))
+                        for f in island1.faces:
                             f.select = False
-                        for f in island.faces:
-                            f.select = True
-                        for f in island.faces:  # returning seams here , we are testing several merge options.
-                            for e in f.edges:
-                                lfaces = e.link_faces
-                                if len(lfaces) > 1:
-                                    for lf in lfaces:
-                                        if lf.select == False:
-                                            e.seam = True
+                        continue
 
-                besti = -1
-                bestratio = 10000
-                bestseamcount = -100
-                # print(bislands)
-                for i, islandinfo in enumerate(
-                        bislands):  # comparison of quality, currently the longest seam gets preference, so islands are not too snake-y
+                    island2 = islands_dict[island2idx]
 
-                    if not islandinfo[1]:  # and islandinfo[2]<deformation_ratio_threshold:
-                        # if bestratio>islandinfo[2]:
-                        #    bestratio=islandinfo[2]
-                        #    besti = i
+                    seamchunks = get_border_seamchunks(island1, island2, islandindices)
 
-                        if bestseamcount < islandinfo[3]:
-                            besti = i
-                            bestseamcount = islandinfo[3]
+                    if len(seamchunks) == 0:
+                        perimeter_tests.append(1000)
+                        test_islands.append(([], []))
+                        for f in island1.faces:
+                            f.select = False
+                        continue;
 
-                # print(bestratio,islandinfo)
-                totaltests += 1
-                # if len(bislands)==1:
-                # print(seamchunks)
-                # besti=0
-                if besti > -1:  # or en(bislands)==1:
+                    # print('seamchunks',len(seamchunks))
+                    eraseseam = seamchunks[0]
+                    #print(seamchunks)
+                    newislandfaces = []
+                    newislandfaces.extend(island1.faces)
+                    newislandfaces.extend(island2.faces)
 
-                    # if len(island)==1:
-                    #    print(seamchunks)  
-                    iinfo = bislands[besti]
-                    island2idx = iinfo[0]
-                    island2 = islands[island2idx]
-                    for f in island2.faces:
-                        f.select = True
-
-                    for e in iinfo[5]:
-                        e.seam = False
-
-                    island.faces.extend(island2.faces)
-                    # islands[i1idx]=island.extend(island2)
-
-                    for f in island2.faces:
-                        islandindices[f.index] = i1idx
-                    for dkey in islandindices.keys():
-                        if islandindices[dkey] > island2idx:
-                            islandindices[dkey] -= 1
-                    islands.pop(island2idx)
-
-                    nislands -= 1
-                    print('merge islands %i cycle %i' % (nislands, a), end='\r')
-                    merged += 1
-                    wm.progress_update(nislands)
-                for f in island.faces:
+                    perimeter_ratio = testPerimeterRatio(bm, newislandfaces)
+                    perimeter_tests.append(perimeter_ratio)
+                    test_islands.append({
+                        'island2': island2,
+                        'common seams': eraseseam,
+                        'island2idx': island2idx,
+                        'faces':newislandfaces
+                    })
+                    found_neighbour = True
+                for f in island1.faces:
                     f.select = False
 
-            i1idx += 1
-        if merged == 0:
-            break
+                if len(perimeter_tests) == 0:
+                    continue;
+                if not found_neighbour:
+                    continue
+                bestratioindex = np.argsort(perimeter_tests)[0]
+                test = test_islands[bestratioindex]
 
-    for f in bm.faces:
-        f.select = True
-    unwrap(op)
-    for f in bm.faces:
-        f.select = False
-    print('total tests', totaltests)
-    print('nislands')
-    print(nislands, len(islands))
-    # me = bpy.context.active_object.data
-    # bmesh.update_edit_mesh( True)
+                ready_for_test[i1idx] = True
+                ready_for_test[test['island2idx']] = True
+
+                tests_prepared.append({'faces': test['faces'],
+                                       'orig perimeter': orig_perimeter_ratio,
+                                       'common seams': test['common seams'],
+                                       'island1': island1,
+                                       'island2': test['island2'],
+                                       'island1idx': i1idx,
+                                       'island2idx': test['island2idx'],
+                                       })
+
+        # todo this should be removed probably
+        for f in bm.faces:
+            f.select = False
+        i = 0
+        for t in tests_prepared:
+            # print(t)
+            for e in t['common seams']:
+                e.seam = False
+                # e.select = True
+            for f in t['faces']:
+                f.select = True
+        # if a == 1:
+        #     fal
+
+        unwrap(op)
+        for t in tests_prepared:
+           # print(t)
+            disqualify, quality = testIslandQuality(context, bm, t['faces'], op, pass_orig_perimeter_ratio=True,
+                                                    orig_perimeter_ratio=t['orig perimeter'],
+                                                    do_unwrap=False)
+
+            if disqualify:
+                for e in t['common seams']:
+                    e.seam = True
+                    continue
+                tests_done[t['island1idx']].append(t['island2idx'])
+                tests_done[t['island2idx']].append(t['island1idx'])
+            # error debug
+            if islands_dict.get(t['island2idx']) == None:
+                print(islands_dict.keys())
+                for f in bm.faces:
+                    f.select = False
+                for f in t['island2'].faces:
+                    f.select = True
+                for f in t['island1'].faces:
+                    f.select = True
+            # move island here:
+            t['island1'].faces = t['faces']
+            t['island1'].seams = []  # at leaste delete them now.
+            for f in t['island2'].faces:
+                islandindices[f.index] = t['island1idx']
+            islands_dict.pop(t['island2idx'])
+        for f in bm.faces:
+            f.select = False
+
     pass;
 
 
@@ -2059,10 +2059,22 @@ class testIsland(Operator):
     curvature_smooth_steps: IntProperty(
         name="Curvature smooth steps",
         description="Smooth steps for curve calculation, takes long time but creates nicer islands.",
-        min=0, max=10,
+        min=0, max=20,
         default=2,
     )
 
+    keep_direction: FloatProperty(
+        name="Keep Direction",
+        description="Keep direction.",
+        min=0, max=2.0,
+        default=1.0,
+    )
+    curvature_influence: FloatProperty(
+        name="Curvature Influence",
+        description="Curvature Influence.",
+        min=0, max=2.0,
+        default=1.0,
+    )
     merge_iterations: IntProperty(
         name="Merging step iterations",
         description="more iterations means bigger, but sometimes more complex islands",
@@ -2198,16 +2210,27 @@ class AutoSeamUnwrap(Operator):
     seed_points: IntProperty(
         name="Minimum seed points count",
         description="Minimum seed points count",
-        min=0, max=50,
+        min=0, max=500,
         default=40,
     )
     curvature_smooth_steps: IntProperty(
         name="Curvature smooth steps",
         description="Smooth steps for curve calculation, takes long time but creates nicer islands.",
-        min=0, max=10,
+        min=0, max=20,
         default=2,
     )
-
+    keep_direction: FloatProperty(
+        name="Keep Direction",
+        description="Keep direction.",
+        min=0, max=2.0,
+        default=1.0,
+    )
+    curvature_influence: FloatProperty(
+        name="Curvature Influence",
+        description="Curvature Influence.",
+        min=0, max=2.0,
+        default=1.0,
+    )
     merge_iterations: IntProperty(
         name="Merging step iterations",
         description="more iterations means bigger, but sometimes more complex islands",
@@ -2296,6 +2319,8 @@ class AutoSeamUnwrap(Operator):
                                   ' but can generate overlaps.')
                 layout.prop(self, 'seed_points')
                 layout.prop(self, 'curvature_smooth_steps')
+                layout.prop(self, 'keep_direction')
+                layout.prop(self, 'curvature_influence')
 
         layout.label(text='Island merging:')
         layout.prop(self, 'merge_iterations')
@@ -2338,7 +2363,7 @@ def menu_func(self, context):
     op.area_deformation_ratio_threshold = 1.35
     op.island_shape_threshold = 4.0
     op.small_island_threshold = 50
-    op.merge_iterations = 0
+    op.merge_iterations = 4
 
     # here are four presets, to simplify usage cases
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Scan/dyntopo - Curvature')
@@ -2348,7 +2373,7 @@ def menu_func(self, context):
     op.area_deformation_ratio_threshold = 1.35
     op.island_shape_threshold = 4.0
     op.small_island_threshold = 50
-    op.merge_iterations = 0
+    op.merge_iterations = 5
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Lowpoly hardsurface')
     op.init_seams = True

@@ -1303,6 +1303,15 @@ def getCurvature(bm, smooth_steps=3):
     print('getting curvature')
     vgroup_weights = np.zeros(len(bm.verts))
 
+    #optimization structure:
+    elinks=[]
+    for v in bm.verts:
+        v_elinks = []
+        elinks.append(v_elinks)
+        for e in v.link_edges:
+            v2 = e.other_vert(v)
+            v_elinks.append(v2.index)
+
     for f in bm.faces:
         for e in f.edges:
             if len(e.link_faces) == 2:
@@ -1318,14 +1327,18 @@ def getCurvature(bm, smooth_steps=3):
     # smoothing step
     for a in range(0, smooth_steps):
         vgroup_weights_smooth = vgroup_weights.copy()
-        for v in bm.verts:
-            for e in v.link_edges:
-                for v1 in e.verts:
-                    if v != v1:
-                        coef = .2
-                        if not v_manifold(v1):
-                            coef *= 2
-                        vgroup_weights_smooth[v1.index] += vgroup_weights[v.index] * (coef / len(v1.link_edges))
+        for v1i,v_elinks in enumerate(elinks):
+            for v2i in v_elinks:
+                vgroup_weights_smooth[v2i] += vgroup_weights[v1i] * (0.2 / len(v_elinks))
+
+        # for v in bm.verts:
+        #     for e in v.link_edges:
+        #         for v1 in e.verts:
+        #             if v != v1:
+        #                 coef = .2
+        #                 if not v_manifold(v1):
+        #                     coef *= 2
+        #                 vgroup_weights_smooth[v1.index] += vgroup_weights[v.index] * (coef / len(v1.link_edges))
         vgroup_weights = vgroup_weights_smooth
 
     # write_weights(vgroup_indices,vgroup_weights,'curvature')

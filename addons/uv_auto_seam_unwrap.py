@@ -464,7 +464,7 @@ def testPerimeterRatio(bm, faces, by_seams=True):
     return perimeter_ratio
 
 
-# old version
+# old version, tests full face area.
 # def testAreaRatio(bm, faces):
 #     # print('test ratio')
 #     uv_layer = bm.loops.layers.uv.verify()
@@ -686,6 +686,7 @@ def seedIslandsGrowth(context, bm, op):
                             for face in linkedv:
                                 if not face.select and tempdone.get(face.index) == None:
                                     tempdone[face.index] = True
+                                    # print(face.normal,islandnormal)
                                     angle = face.normal.angle(islandnormal)
                                     # print(angle)
 
@@ -873,7 +874,7 @@ def continue_path_possibilities(v_path, weights, curvature_influence=0.5, thresh
                 #a2 += e2.calc_face_angle() * curvature_influence
                 a2 += abs(weights[v2.index]) * curvature_influence
             else:
-                a2 = abs(weights[v2.index]) * curvature_influence *2
+                a2 = abs(weights[v2.index]) * curvature_influence *2 -5 #border faces should be prioritized.
             # print(a,a2)
             edges.append(e2)
             e_weights.append(a + a2)
@@ -908,10 +909,11 @@ class VPath():
         self.length = 0
         self.direction = None
         self.growing = True
+        self.hit_seam = False
         self.can_be_used = True
-        self.meets = []  # which path the path meets
+        # self.meets = []  # which path the path meets
         self.siblings = []  # will be killed once successfull
-        self.siblings_timeout = [-1]  # will be killed once successfull
+        self.siblings_timeout = -1  # will be killed once successfull it's a
 
     def copy(self):
         cp = VPath()
@@ -921,7 +923,8 @@ class VPath():
         cp.length = self.length
         cp.direction = self.direction.copy()
         cp.growing = True
-        cp.meets = []
+        cp.hit_seam = self.hit_seam
+        # cp.meets = []
         cp.siblings = self.siblings  # not a copy! shared!
         cp.siblings_timeout = self.siblings_timeout
         return cp
@@ -1298,7 +1301,6 @@ def write_weights(indices, weights, name):
 
 def getCurvature(bm, smooth_steps=3):
     print('getting curvature')
-    vgroup_indices = range(0, len(bm.verts))
     vgroup_weights = np.zeros(len(bm.verts))
 
     for f in bm.faces:
@@ -1310,7 +1312,7 @@ def getCurvature(bm, smooth_steps=3):
                     vgroup_weights[v.index] += ea
             else:
                 for v in e.verts:
-                    vgroup_weights[v.index] = 3.1415926  # give some bonus to non manifold areas
+                    vgroup_weights[v.index] += 0  # give some bonus to non manifold areas
 
     print('smoothing curvature')
     # smoothing step
@@ -1348,6 +1350,7 @@ def seedIslandsCurvature(context, bm, op):
     normalized_weights *= 1 / (maxw - minw)
 
     est_weights = abs(vgroup_weights)
+    vgroup_indices = range(0, len(bm.verts))
 
     sorted_indices = np.argsort(vgroup_weights)
 
@@ -1357,7 +1360,7 @@ def seedIslandsCurvature(context, bm, op):
     i = 0
     topverts = []
     borderverts = []
-    max_top_points = max(op.seed_points, totverts * .02)
+    max_top_points = max(op.seed_points, totverts * .015)
     consider_percentage = .5  # less creates less topverts
     for vi in range(0, int(totverts * consider_percentage)):
         i = math.floor(vi / 2)
@@ -1387,7 +1390,7 @@ def seedIslandsCurvature(context, bm, op):
                 v1.select = True
     # border verts get added last to not be too active.
 
-    # topverts.extend(borderverts)
+    #topverts.extend(borderverts)
 
     # test select top verts
     for v in bm.verts:
@@ -1396,6 +1399,8 @@ def seedIslandsCurvature(context, bm, op):
         v.select = True
         # if i ==2:
         #    fal
+    # write_weights(vgroup_indices, vgroup_weights, 'curvature')
+    # fal
 
     pathindex = 0
     done_verts = {}  # with indices of the path
@@ -1406,7 +1411,19 @@ def seedIslandsCurvature(context, bm, op):
     dead_ends = {} #holds path that end on border of mesh.
     done_paths = []
     for v in topverts:
-        for e in v.link_edges:
+        # this stores all possible connecting paths:
+
+        topverts_meets[v.index] = {}
+        for vt in topverts:
+            topverts_meets[v.index][vt.index] = []
+        dead_ends[v.index] = []
+        # if op.seed_points>(len(topverts)):
+        #     seed_edges = v.link_edges
+        # else:
+        #     seed_edges = v_counter_edges(v)
+        # print('topverts', len(topverts))
+        seed_edges = v.link_edges
+        for e in seed_edges:
             p1 = VPath()
             p1.index = pathindex
             possible_paths.append(p1)
@@ -1422,11 +1439,13 @@ def seedIslandsCurvature(context, bm, op):
 
             done_verts[v.index] = p1.index
             done_verts[v2.index] = p1.index
-            # this stores all possible connecting paths:
-            topverts_meets[v.index] = {}
-            for vt in topverts:
-                topverts_meets[v.index][vt.index] = []
-            dead_ends[v.index] = []
+
+            if not v_manifold(v2):
+                p1.growing = False
+                p1.hit_seam = True
+                dead_ends[v.index].append(p1)
+
+
     done = False
     while not done:
         # growth loop for paths - they simply grow into their respective direction, and hit with the others.
@@ -1440,6 +1459,11 @@ def seedIslandsCurvature(context, bm, op):
             # print(p)
             # print(dir(p))
             if p1.growing:
+                if p1.siblings_timeout >0:
+                    p1.siblings_timeout -=1
+                    if p1.siblings_timeout ==0:
+                        p1.growing = False
+
                 new_paths = 0
 
                 edges = continue_path_possibilities(p1, vgroup_weights, curvature_influence=op.curvature_influence,
@@ -1474,7 +1498,10 @@ def seedIslandsCurvature(context, bm, op):
                         done_verts[v2.index] = p1.index
                         if not v_manifold(v2):
                             p1.growing = False
+                            p1.hit_seam = True
                             dead_ends[tv1.index].append(p1)
+                            for s in p1.siblings:
+                                s.siblings_timeout = 1
                     else:
                         p2i = done_verts[v2.index]  # path index
                         p2 = possible_paths[p2i]  # path we met
@@ -1493,13 +1520,13 @@ def seedIslandsCurvature(context, bm, op):
                             p1.growing = False
                             p2.growing = False
                             for s in p1.siblings:
-                                s.growing = False
-                                if s != p1:
-                                    s.can_be_used = False
+                                s.siblings_timeout = 1
+                                # if s != p1:
+                                #     s.can_be_used = False
                             for s in p2.siblings:
-                               s.growing = False
-                               if s != p2:
-                                   s.can_be_used = False
+                                s.siblings_timeout = 1
+                                # if s != p2:
+                                #    s.can_be_used = False
 
                         # #stop all growth of siblings.
                         # if not p1.growing:
@@ -1516,6 +1543,15 @@ def seedIslandsCurvature(context, bm, op):
             if tv1 == tv2:
                 continue
             meets = topverts_meets[tv1.index][tv2.index]
+            # sibling_groups = []
+            # for m in meets:
+            #     if m.siblings not in sibling_groups:
+            #         sibling_groups.append(m.siblings)
+            #
+            #
+            # if de.can_be_used:
+            #     if de.siblings not in sibling_groups:
+            #         sibling_groups.append(de.siblings)
             # never met.
             if len(meets) == 0:
                 continue
@@ -1540,22 +1576,26 @@ def seedIslandsCurvature(context, bm, op):
 
         #paths towards border of non manifold mesh.
         sibling_groups = []
+        # print(dead_ends)
         for de in dead_ends[tv1.index]:
             if de.can_be_used:
                 if de.siblings not in sibling_groups:
                     sibling_groups.append(de.siblings)
+
+        minlength = 1000000
+        minlength_path = None
+
         for sg in sibling_groups:
-            minlength = 1000000
-            minlength_path = sg[0]
+        # if len(sibling_groups)>0:
             for p in sg:
                 if p in dead_ends[tv1.index]:
                     if minlength>p.length:
                         minlength = p.length
                         minlength_path = p
+        if minlength_path is not None:
             for e in minlength_path.edges:
                 e.seam = True
                 e.select = True
-
     bm.faces.ensure_lookup_table()
     islands = getIslands(bm)
     return islands
@@ -2133,6 +2173,8 @@ def mergeIslands(context,
                     continue
                 tests_done[t['island1idx']].append(t['island2idx'])
                 tests_done[t['island2idx']].append(t['island1idx'])
+            else:
+                tests_done[t['island1idx']] = [] #zero out tests done since it's a new island now.
             # error debug
             if islands_dict.get(t['island2idx']) == None:
                 print(islands_dict.keys())
@@ -2142,7 +2184,7 @@ def mergeIslands(context,
                     f.select = True
                 for f in t['island1'].faces:
                     f.select = True
-            # move island here:
+            # move island2 into island1 here, and delete island2.
             t['island1'].faces = t['faces']
             t['island1'].seams = []  # at leaste delete them now.
             for f in t['island2'].faces:
@@ -2244,13 +2286,13 @@ class testIsland(Operator):
         name="Keep Direction",
         description="Keep direction.",
         min=0, max=2.0,
-        default=1.0,
+        default=1,
     )
     curvature_influence: FloatProperty(
         name="Curvature Influence",
         description="Curvature Influence.",
         min=0, max=2.0,
-        default=1.0,
+        default=1,
     )
     merge_iterations: IntProperty(
         name="Merging step iterations",
@@ -2269,7 +2311,7 @@ class testIsland(Operator):
     small_island_threshold: IntProperty(
         name="Small island size limit",
         description="only islands smaller than the size will be merged.",
-        min=0, max=500,
+        min=0, max=1000,
         default=50,
     )
     angle_deformation_ratio_threshold: FloatProperty(
@@ -2400,13 +2442,13 @@ class AutoSeamUnwrap(Operator):
         name="Keep Direction",
         description="Keep direction.",
         min=0, max=2.0,
-        default=1.0,
+        default=1,
     )
     curvature_influence: FloatProperty(
         name="Curvature Influence",
         description="Curvature Influence.",
         min=0, max=2.0,
-        default=1.0,
+        default=1,
     )
     merge_iterations: IntProperty(
         name="Merging step iterations",
@@ -2417,7 +2459,7 @@ class AutoSeamUnwrap(Operator):
     small_island_threshold: IntProperty(
         name="Small island size limit",
         description="only islands smaller than the size will be merged.",
-        min=0, max=500,
+        min=0, max=1000,
         default=50,
     )
     angle_deformation_ratio_threshold: FloatProperty(
@@ -2538,8 +2580,8 @@ def menu_func(self, context):
     op.island_style = 'TILES'
     op.angle_deformation_ratio_threshold = 1.2
     op.area_deformation_ratio_threshold = 1.35
-    op.island_shape_threshold = 4.0
-    op.small_island_threshold = 200
+    op.island_shape_threshold = 1.4
+    op.small_island_threshold = 400
     op.merge_iterations = 4
 
     # here are four presets, to simplify usage cases
@@ -2547,11 +2589,11 @@ def menu_func(self, context):
     op.init_seams = True
     op.island_style = 'CURVATURE'
     op.curvature_smooth_steps = 10
-    op.seed_points = 10
+    op.seed_points = 30
     op.angle_deformation_ratio_threshold = 1.2
     op.area_deformation_ratio_threshold = 1.35
-    op.island_shape_threshold = 4.0
-    op.small_island_threshold = 200
+    op.island_shape_threshold = 1.4
+    op.small_island_threshold = 400
     op.merge_iterations = 5
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Lowpoly hardsurface')
@@ -2561,7 +2603,7 @@ def menu_func(self, context):
     op.small_island_threshold = 20
     op.angle_deformation_ratio_threshold = 1.05
     op.area_deformation_ratio_threshold = 1.05
-    op.island_shape_threshold = 1.25
+    op.island_shape_threshold = 1.1
     op.island_style = 'GROW'
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
@@ -2572,7 +2614,7 @@ def menu_func(self, context):
     op.small_island_threshold = 50
     op.angle_deformation_ratio_threshold = 1.25
     op.area_deformation_ratio_threshold = 1.35
-    op.island_shape_threshold = 1.25
+    op.island_shape_threshold = 1.1
     op.island_style = 'GROW'
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
@@ -2582,7 +2624,7 @@ def menu_func(self, context):
     op.small_island_threshold = 300
     op.angle_deformation_ratio_threshold = 1.6
     op.area_deformation_ratio_threshold = 1.6
-    op.island_shape_threshold = 1.8
+    op.island_shape_threshold = 1.4
     # self.layout.operator(MergeIslands.bl_idname)
     self.layout.separator()
 

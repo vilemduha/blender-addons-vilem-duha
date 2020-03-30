@@ -19,16 +19,16 @@ The addons included are:
 
 Blender 2.8: 
 
- Cobweb - create beautiful spiderwebs with painting in Blender Scene
+   Cobweb - create beautiful spiderwebs with painting in Blender Scene
  
- Auto seams unwrap - create seams automagically
+   Auto seams unwrap - create seams automagically
  
 Blneder 2.79:
 
- Macros
+   Macros
  
- Select Similar
+   Select Similar
  
- Fcurve smooth handles
+   Fcurve smooth handles
  
- Render farm prepare (sheepit script)
+   Render farm prepare (sheepit script)

@@ -689,12 +689,13 @@ def seedIslandsGrowth(context, bm, op):
         islandindices[i] = -1
 
     #define initial islands
-    for f in topfaces:
+    for i,f in enumerate(topfaces):
         island = Island()
         island.faces = [f]
         # island.seams= f.edges[:]#carefull seams aren't yet defined!
         islands.append(island)
-        islandindices[f.index]
+        islandindices[f.index] = i
+        island.index = i
         island.last_grown = [f]
 
     grow_islands_limited(islands, islandindices, anglelimit_face2face = anglelimit_face2face, anglelimit_island = anglelimit_island)
@@ -1092,9 +1093,7 @@ def smooth_borders(island1, island2, islandindices = {}):
         findices1[f.index] = 1
     for f in island2.faces:
         findices2[f.index] = 1
-    island1index = islandindices.get(island1.faces[0].index)
-    island2index = islandindices.get(island2.faces[0].index)
-
+   
     for f in island1.faces:
         border_self = 0
         border_island2 = 0
@@ -1112,7 +1111,7 @@ def smooth_borders(island1, island2, islandindices = {}):
         island1.faces.remove(f)
         findices1[f.index] = None
         findices2[f.index] = 1
-        islandindices[f.index] = island2index
+        islandindices[f.index] = island2.index
     island2.faces.extend(remove1)
 
     remove2 = []
@@ -1132,7 +1131,7 @@ def smooth_borders(island1, island2, islandindices = {}):
 
     for f in remove2:
         island2.faces.remove(f)
-        islandindices[f.index] = island1index
+        islandindices[f.index] = island1.index
 
     island1.faces.extend(remove2)
 

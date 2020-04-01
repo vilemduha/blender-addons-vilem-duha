@@ -621,48 +621,53 @@ def grow_islands_limited(islands, islandindices, anglelimit_face2face=10, anglel
     while not all:
         grown = False
         for i, island in enumerate(islands):
-            new_grown = []
-            i_normal = island.faces[0].normal
-            # todo optimize this - check only border faces. otherwise it's crazy iteration inside the island.
-            for f in island.last_grown:
-                for e in f.edges:
-                    for f1 in e.link_faces:
-                        # for f1 in e.link_faces:
-                        i2 = islandindices[f1.index]  # potential index of neigbour island or own.
-                        if i2 == -1:
-                            f_angle = face_angle(e)
-                            if i_normal.length > 0 and f1.normal.length > 0:
-                                i_angle = i_normal.angle(f1.normal)
-                            else:
-                                i_angle = 0
-                            if f_angle < anglelimit_face2face and i_angle < anglelimit_island:
-                                islandindices[f1.index] = i
-                                island.faces.append(f1)
-                                new_grown.append(f1)
-                                grown = True  # todo optimize this - can have island.growing per island not to check their respective seams.
+            if island.can_grow:
+                island.can_grow = False
+                new_grown = []
+                i_normal = island.faces[0].normal
+                # todo optimize this - check only border faces. otherwise it's crazy iteration inside the island.
+                for f in island.last_grown:
+                    for e in f.edges:
+                        for f1 in e.link_faces:
+                            # for f1 in e.link_faces:
+                            i2 = islandindices[f1.index]  # potential index of neigbour island or own.
+                            if i2 == -1:
+                                f_angle = face_angle(e)
+                                if i_normal.length > 0 and f1.normal.length > 0:
+                                    i_angle = i_normal.angle(f1.normal)
+                                else:
+                                    i_angle = 0
+                                # print('fangle',anglelimit_face2face,f_angle)
+                                # print('iangle',anglelimit_island,i_angle)
+                                if f_angle < anglelimit_face2face and i_angle < anglelimit_island:
+                                    islandindices[f1.index] = i
+                                    island.faces.append(f1)
+                                    new_grown.append(f1)
+                                    grown = True  # todo optimize this - can have island.growing per island not to check their respective seams.
+                                # island can potentially grow whether or not a new face was added, because later iterations can have higher angle tolerance.
+                                island.can_grow = True
+                                continue
 
-                            continue
+                            if i2 != i:
+                                if islands[i2] not in island.neighbours:
+                                    island.neighbours.append(islands[i2])
 
-                        if i2 != i:
-                            if islands[i2] not in island.neighbours:
-                                island.neighbours.append(islands[i2])
-
-            island.last_grown = new_grown
+                island.last_grown = new_grown
         if not grown:
             all = True
 
 
-def seedIslandsGrowth(context, bm, op):
-    wm = bpy.context.window_manager
+def select_islands(bm, islands):
+    for f in bm.faces:
+        f.select = False
+    for i in islands:
+        for f in i.faces:
+            f.select = True
+    fal
 
-    if 0:  # op.grow_iterations == 0 :# if the user sets 0 in this, it means 1 island = 1 face.
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.mark_seam(clear=False)
-        bpy.ops.mesh.select_all(action='DESELECT')
-        print('islands to faces')
-        for f in bm.faces:
-            islands.append([f])
-        return islands
+
+def seedIslandsGrowth(context, bm, bm_dict, op):
+    wm = bpy.context.window_manager
 
     ob = bpy.context.active_object
 
@@ -670,8 +675,8 @@ def seedIslandsGrowth(context, bm, op):
     anglelimit_face2face = op.growth_limit_angle  # crawling face jump limit.
 
     done = {}
-
-    vgroup_weights = getCurvature(bm, smooth_steps=op.curvature_smooth_steps)
+    vgroup_weights = getCurvature(bm, bm_dict=bm_dict, smooth_steps=op.curvature_smooth_steps)
+    print('growing UV islands')
 
     # sort faces by smallest curvature first, will start as centers of potential islands.
 
@@ -679,7 +684,7 @@ def seedIslandsGrowth(context, bm, op):
     fweights = np.zeros(len(bm.faces))
     for f in bm.faces:
         for v in f.verts:
-            fweights[f.index] += abs(vgroup_weights[v.index])
+            fweights[f.index] += abs(vgroup_weights[v.index]) / f.calc_area()
 
     face_order = np.argsort(fweights)
 
@@ -700,16 +705,29 @@ def seedIslandsGrowth(context, bm, op):
         island.index = i
         island.last_grown = [f]
 
+    print('first growth round')
     grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face,
                          anglelimit_island=anglelimit_island)
-    # second step grows over limits to fill all left out faces
-    grow_islands_limited(islands, islandindices, anglelimit_face2face=2.5, anglelimit_island=2.5)
-
+    for g in range(0, 10):
+        print(g)
+        donefaces = 0
+        for island in islands:
+            donefaces += len(island)
+            if island.can_grow:
+                island.last_grown = island.faces[:]
+        if donefaces == len(bm.faces):
+            break
+        anglelimit_face2face = anglelimit_face2face * 1.25
+        grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face * 10,
+                             anglelimit_island=anglelimit_island * 1.2)
+    # select_islands(bm,islands)
+    # select_islands(bm,islands)
     # try to smooth borders between islands.
+    print('smooth borders')
     for i in islands:
         for n in i.neighbours:
             # print('smooth',i,n)
-            smooth_borders(i, n, islandindices)
+            smooth_borders(bm_dict, i, n, islandindices)
 
     for f in bm.faces:
         f.select = False
@@ -724,20 +742,14 @@ def seedIslandsGrowth(context, bm, op):
                     if islandindices[f1.index] != i:
                         e.seam = True
                         island.seams.append(e)
-    islands_for_splitting = []
-    # this potentially adds extra edges. can be usefull for
-    # for e in bm.edges:
-    #     a = face_angle(e)
-    #     if a>anglelimit_face2face:
-    #         e.seam = True
-    # can't get steps directly because of the step above - which possibly splits islnds.
+    # can't get steps directly because of uncertainity if the growth algo did reach all faces.
+    # There might be possible unconnected parts or areas not reached from the seed points.
     # islands_for_test = islands
-    # fal
     islands_for_test = getIslands(bm)
     # tests initial island quality
     good_islands, disqalified_islands = testIslandsQuality(bm, op, islands_for_test)
     print(len(good_islands), len(disqalified_islands))
-    split_result_islands = split_until_done(bm, op, disqalified_islands)
+    split_result_islands = split_until_done(bm, bm_dict, op, disqalified_islands)
     good_islands.extend(split_result_islands)
 
     return good_islands
@@ -1077,48 +1089,117 @@ class Island():
         self.neighbours = []
         self.growing = False  # growth algorithm uses this.
         self.last_grown = []
+        self.can_grow = True  # can grow if any of surrounding face isn't in another island yet. Mainly for growth algo.
         self.index = -1  # some algos use indices, some don't?
 
     def __len__(self):
         return len(self.faces)
 
 
-def smooth_borders(island1, island2, islandindices={}):
+class BMeshDict():
+    def __init__(self):
+        self.faces = {}
+        self.neighbours_faces_edge = {}
+        self.f_edges = {}
+        self.neighbour_faces_vert = {}
+
+        self.verts = {}
+        self.v_neigbour_verts = {}
+
+        self.edges = {}
+        self.e_angles = {}
+        self.e_lengths = {}
+        self.e_angles_signed = {}
+        self.e_verts = {}
+
+
+def bm_to_dicts(bm):
+    '''attempt to hugely speedup any analysis by using dicts instead of bmesh'''
+    print('create optimisation data')
+    bm_dict = BMeshDict()
+    for f in bm.faces:
+        fi = f.index
+        bm_dict.faces[fi] = f
+        neighbours_faces_edge = []
+        neighbour_faces_vert = []
+        edges = []
+        for e in f.edges:
+            edges.append(e.index)
+            for f1 in e.link_faces:
+                if f != f1:
+                    neighbours_faces_edge.append(f1.index)
+        bm_dict.neighbours_faces_edge[fi] = neighbours_faces_edge
+        bm_dict.f_edges[fi] = edges
+
+        for v in f.verts:
+            for f1 in v.link_faces:
+                if f1 != f and f1 not in neighbour_faces_vert:
+                    neighbour_faces_vert.append(f1.index)
+
+        bm_dict.neighbour_faces_vert[fi] = neighbour_faces_vert
+
+    for e in bm.edges:
+        ei = e.index
+        bm_dict.edges[ei] = e
+        bm_dict.e_angles[ei] = face_angle(e)
+        bm_dict.e_angles_signed[ei] = face_angle_signed(e)
+        bm_dict.e_verts[ei] = [e.verts[0].index, e.verts[1].index]
+        bm_dict.e_lengths[ei] = e.calc_length()
+
+    for v in bm.verts:
+        vi = v.index
+        neighbour_verts = []
+        for e in v.link_edges:
+            v1 = e.other_vert(v)
+            neighbour_verts.append(v1.index)
+        # bm_dict.verts[v.index] = v
+        bm_dict.v_neigbour_verts[v.index] = neighbour_verts
+    return bm_dict
+
+
+def smooth_borders(bm_dict, island1, island2, islandindices={}):
     # little heuristic attempt to make nicer islands
     # should remove teeth on border of islands
 
     # check which faces have longer border with neigbour than with self.
     # this makes more sense on larger islands,
     # smaller islands (more deformed areas) might benefit form being not so nice.
+    # tried to optimize this in many different ways, still quite slow. Bmesh iteration is what is slow!
 
     if len(island1) == 0 or len(island2) == 0:
-        return;
-    #make 2 iterations - gives better results, but takes 2x time.
-    for a in range(0,2):
+        return
+
+    # to acces which face belongs to which island really fast.
+    findices1 = {}
+    findices2 = {}
+    fedges1 = {}
+    fedges2 = {}
+    for f in island1.faces:
+        findices1[f.index] = 1
+
+    for f in island2.faces:
+        findices2[f.index] = 1
+
+    # make 2 iterations - gives better results, but takes 2x time.
+    for a in range(0, 2):
         remove1 = []
-        # to acces which face belongs to which island really fast.
-        findices1 = {}
-        findices2 = {}
-        for f in island1.faces:
-            findices1[f.index] = 1
-        for f in island2.faces:
-            findices2[f.index] = 1
 
         for f in island1.faces:
             border_self = 0
             border_island2 = 0
-            for e in f.edges:
+            for ei, f1i in zip(bm_dict.f_edges[f.index], bm_dict.neighbours_faces_edge[f.index]):
                 border = False
-                for f1 in e.link_faces:
-                    if findices2.get(f1.index) is not None:
-                        border = True
-                        border_island2 += e.calc_length()
+                if findices2.get(f1i) is not None:
+                    border = True
+                    border_island2 += bm_dict.e_lengths[ei]
                 if not border:
-                    border_self += e.calc_length()
+                    border_self += bm_dict.e_lengths[ei]
             if border_island2 > border_self * 1.01:
                 remove1.append(f)
         # never create 0 faces islands.
         if len(remove1) < len(island1):
+            # island1.faces[:] = [face for face in island1.faces if face not in remove1]
+
             for f in remove1:
                 island1.faces.remove(f)
                 findices1[f.index] = None
@@ -1130,19 +1211,19 @@ def smooth_borders(island1, island2, islandindices={}):
         for f in island2.faces:
             border_self = 0
             border_island1 = 0
-            for e in f.edges:
+            for ei, f1i in zip(bm_dict.f_edges[f.index], bm_dict.neighbours_faces_edge[f.index]):
                 border = False
-                for f1 in e.link_faces:
-                    if findices1.get(f1.index) is not None:
-                        border = True
-                        border_island1 += e.calc_length()
+                if findices1.get(f1i) is not None:
+                    border = True
+                    border_island1 += bm_dict.e_lengths[ei]
                 if not border:
-                    border_self += e.calc_length()
-            if border_island1 > border_self * 1.05:
+                    border_self += bm_dict.e_lengths[ei]
+            if border_island1 > border_self * 1.01:
                 remove2.append(f)
 
         # never create 0 faces islands.
         if len(remove2) < len(island2):
+            # island2.faces[:] = [face for face in island2.faces if face not in remove2]
             for f in remove2:
                 island2.faces.remove(f)
                 islandindices[f.index] = island1.index
@@ -1163,11 +1244,14 @@ def zKey(f):
     return f.calc_center_median_weighted().z
 
 
-def split_island(bm, op, island, axis_override=None):
+def split_island(bm, bm_dict, op, island, axis_override=None):
     islands = []
     # init boundbox on max, but don't calculate it in lower iters.
     if island.minv is None:
-        island.minv, island.maxv = getBBbmesh(bm)
+        if len(island) == len(bm.faces):
+            island.minv, island.maxv = getBBbmesh(bm)
+        else:
+            island.minv, island.maxv = getBB(island.faces)
 
     axis, bbc = getSplitData(island.minv, island.maxv)
 
@@ -1213,7 +1297,7 @@ def split_island(bm, op, island, axis_override=None):
         # has to calculate bounding box because it could cause problems with splitting in lower iterations.
         must_calc_bb = True
 
-    smooth_borders(island1, island2)
+    smooth_borders(bm_dict, island1, island2)
 
     has_new_seams = False
     island1.seams = []
@@ -1267,7 +1351,7 @@ def split_island(bm, op, island, axis_override=None):
     return retislands
 
 
-def split_islands(bm, op, islands_for_splitting, max_size=2000):
+def split_islands(bm, bm_dict, op, islands_for_splitting, max_size=2000):
     '''split all islands into halves, now by their bound box.
         returns islands that can't be split anymore and
         islands that are ready for testing
@@ -1279,7 +1363,7 @@ def split_islands(bm, op, islands_for_splitting, max_size=2000):
     islands_for_test = []
     while len(islands_for_splitting) > 0:
         island = islands_for_splitting.pop()
-        islands = split_island(bm, op, island)
+        islands = split_island(bm, bm_dict, op, island)
         for island in islands:
             if len(island.faces) < max_size:
                 if island.splittable:
@@ -1311,41 +1395,78 @@ def write_weights(indices, weights, name):
     bpy.ops.object.mode_set(mode='EDIT')
 
 
-def getCurvature(bm, smooth_steps=3):
+# def getCurvature(bm, smooth_steps=3):
+# print('getting curvature')
+# vgroup_weights = np.zeros(len(bm.verts))
+#
+# for f in bm.faces:
+#     for e in f.edges:
+#         ea = face_angle_signed(e) / 3.1415926
+#         for v in e.verts:
+#             # print(v.index)
+#             vgroup_weights[v.index] += ea
+#
+# # no need to do calculation below if no smoothing happens, return.
+# if smooth_steps == 0:
+#     return vgroup_weights
+# # optimization structure, not to access repeatedly
+# elinks = []
+# for v in bm.verts:
+#     v_elinks = []
+#     elinks.append(v_elinks)
+#     for e in v.link_edges:
+#         v2 = e.other_vert(v)
+#         v_elinks.append(v2.index)
+#
+# print('smoothing curvature')
+# # smoothing step
+# for a in range(0, smooth_steps):
+#     vgroup_weights_smooth = vgroup_weights.copy()
+#     for v1i, v_elinks in enumerate(elinks):
+#         for v2i in v_elinks:
+#             vgroup_weights_smooth[v2i] += vgroup_weights[v1i] * (0.2 / len(v_elinks))
+#
+#     vgroup_weights = vgroup_weights_smooth
+#
+# # write_weights(vgroup_indices,vgroup_weights,'curvature')
+#
+# return vgroup_weights
+
+
+def getCurvature(bm, smooth_steps=3, bm_dict=None):
     print('getting curvature')
     vgroup_weights = np.zeros(len(bm.verts))
 
-    for f in bm.faces:
-        for e in f.edges:
-            ea = face_angle_signed(e) / 3.1415926
-            for v in e.verts:
-                # print(v.index)
-                vgroup_weights[v.index] += ea
+    for ei in range(0, len(bm_dict.edges)):
+        ea = bm_dict.e_angles_signed[ei]
+        for vi in bm_dict.e_verts[ei]:
+            vgroup_weights[vi] += ea
 
     # no need to do calculation below if no smoothing happens, return.
     if smooth_steps == 0:
         return vgroup_weights
     # optimization structure, not to access repeatedly
-    elinks = []
-    for v in bm.verts:
-        v_elinks = []
-        elinks.append(v_elinks)
-        for e in v.link_edges:
-            v2 = e.other_vert(v)
-            v_elinks.append(v2.index)
 
     print('smoothing curvature')
     # smoothing step
     for a in range(0, smooth_steps):
         vgroup_weights_smooth = vgroup_weights.copy()
-        for v1i, v_elinks in enumerate(elinks):
-            for v2i in v_elinks:
-                vgroup_weights_smooth[v2i] += vgroup_weights[v1i] * (0.2 / len(v_elinks))
+        # print(bm_dict.v_neigbour_verts)
 
+        # for item in bm_dict.v_neigbour_verts.items():
+        #     for v2i in item[1]:
+        #         vgroup_weights_smooth[v2i] += vgroup_weights[item[0]] * (0.2 / len(item[1]))
+
+
+        for v1i in range(0,len(bm.verts)):
+            neighbours = bm_dict.v_neigbour_verts[v1i]
+            w =  vgroup_weights[v1i] * (0.2 / len(neighbours))
+            for v2i in neighbours:
+                vgroup_weights_smooth[v2i] += w
         vgroup_weights = vgroup_weights_smooth
 
     # write_weights(vgroup_indices,vgroup_weights,'curvature')
-
+    print('curvature done')
     return vgroup_weights
 
 
@@ -1396,7 +1517,7 @@ def get_seed_faces(bm, face_weights, seed_faces=10):
     # max_seed_faces = max(seed_faces, totfaces * .015)
     consider_percentage = 1.0  # less creates less topverts
     # iterate faces sorted from lowest absolute possible weights. = should be the most flat areas on the mesh.
-    for i in range(0, int(totfaces * consider_percentage)):
+    for i in range(0, totfaces):
         f = bm.faces[sorted_indices[i]]
 
         neighbour_selected = False
@@ -1413,20 +1534,27 @@ def get_seed_faces(bm, face_weights, seed_faces=10):
             # if len(topfaces) > max_seed_faces:
             #     break
         f.select = True
-        for v in f.verts:
-            for f1 in v.link_faces:
-                f1.select = True
+        # select direct neighbours, to increase distance a bit.
+        if totfaces > 10000:
+            for v in f.verts:
+                for f1 in v.link_faces:
+                    f1.select = True
+    # for f in bm.faces:
+    #     f.select = False
+    # for f in topfaces:
+    #     f.select = True
+    # fal
     return topfaces
 
 
-def seedIslandsCurvature(context, bm, op):
+def seedIslandsCurvature(context, bm, bm_dict, op):
     bm.verts.ensure_lookup_table()
     # bm.faces.sort(key = xKey)
 
     vdists = []
     tops = []
 
-    vgroup_weights = getCurvature(bm, smooth_steps=op.curvature_smooth_steps)
+    vgroup_weights = getCurvature(bm, bm_dict=bm_dict, smooth_steps=op.curvature_smooth_steps)
 
     # normalization to 0-1
     minw = vgroup_weights.min()
@@ -1496,11 +1624,12 @@ def seedIslandsCurvature(context, bm, op):
                 dead_ends[v.index].append(p1)
 
     done = False
+    print('growing island seams')
+
     while not done:
         # growth loop for paths - they simply grow into their respective direction, and hit with the others.
         # the trick is, they grow at the same time this achieves something similar to delaunay.
         i = 0
-        print('growing island seams')
         grown = False
 
         for p1 in possible_paths:
@@ -1642,7 +1771,7 @@ def seedIslandsCurvature(context, bm, op):
     # tests initial island quality
     good_islands, disqalified_islands = testIslandsQuality(bm, op, islands_for_test)
     print(len(good_islands), len(disqalified_islands))
-    split_result_islands = split_until_done(bm, op, disqalified_islands)
+    split_result_islands = split_until_done(bm, bm_dict, op, disqalified_islands)
     good_islands.extend(split_result_islands)
 
     return good_islands
@@ -1664,7 +1793,7 @@ def testIslandsQuality(bm, op, islands_for_test, do_perimeter=True):
     return good_islands, disqualified_islands
 
 
-def split_until_done(bm, op, islands_for_splitting):
+def split_until_done(bm, bm_dict, op, islands_for_splitting):
     # always split UV's perpendicular to longest axis in 3d space
     # do it in batches - split and get ready for test -> test -> do it again until done.
 
@@ -1681,7 +1810,7 @@ def split_until_done(bm, op, islands_for_splitting):
         # first split everything that can be split
         print('splitting islands ', end='\r')
 
-        finished_islands, islands_for_test = split_islands(bm, op, islands_for_splitting)
+        finished_islands, islands_for_test = split_islands(bm, bm_dict, op, islands_for_splitting)
 
         # these islands are unsplittable islands from split_islands.
         final_islands.extend(finished_islands)
@@ -1699,25 +1828,25 @@ def split_until_done(bm, op, islands_for_splitting):
     return final_islands
 
 
-def seedIslandsTiles(context, bm, op):
+def seedIslandsTiles(context, bm, bm_dict, op):
     # always split UV's perpendicular to longest axis in 3d space
 
     start_island = Island()
     start_island.faces = bm.faces
     islands_for_splitting = [start_island, ]
-    final_islands = split_until_done(bm, op, islands_for_splitting)
+    final_islands = split_until_done(bm, bm_dict, op, islands_for_splitting)
     return final_islands
 
 
-def seedIslands(context, bm, op):
+def seedIslands(context, bm, bm_dict, op):
     if op.island_style == 'GROW':
-        return seedIslandsGrowth(context, bm, op)
+        return seedIslandsGrowth(context, bm, bm_dict, op)
 
     elif op.island_style == 'CURVATURE':
-        return seedIslandsCurvature(context, bm, op)
+        return seedIslandsCurvature(context, bm, bm_dict, op)
 
     elif op.island_style == 'TILES':
-        return seedIslandsTiles(context, bm, op)
+        return seedIslandsTiles(context, bm, bm_dict, op)
 
 
 def anysel(e):
@@ -1915,7 +2044,7 @@ def neglen(x):
 
 
 def mergeIslands(context,
-                 bm, islands,
+                 bm, bm_dict, islands,
                  op):
     '''merge UV islands.
     By now it checks all the small islands, tries to find one buddy which improves their perimeter ratio.
@@ -2043,7 +2172,7 @@ def mergeIslands(context,
                     # print(i1seams_length,i2seams_length,commonseam_length, commonseam_ratio)
                     # print('angle     peri     commonseam     facecounts')
                     # print(angle_ratio,perimeter_ratio, commonseam_ratio,len(island1), len(island2))
-                    ratio = perimeter_ratio + angle_ratio + commonseam_ratio
+                    ratio = perimeter_ratio + angle_ratio * 2 + commonseam_ratio
 
                     # drop the tests if not pass
                     if perimeter_ratio > op.island_shape_threshold:
@@ -2161,14 +2290,15 @@ def seed_with_merge(context, op):
     tot = 20000
     wm.progress_begin(0, tot)
 
+    # get bmesh
     ob = bpy.context.active_object
-
     me = ob.data
-    if op.init_seams:
-        bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bm_dict = bm_to_dicts(bm)
 
-        bm = bmesh.from_edit_mesh(me)
-        bm.faces.ensure_lookup_table()
+    if op.init_seams:
 
         for f in bm.faces:
             f.select = False
@@ -2176,30 +2306,26 @@ def seed_with_merge(context, op):
             e.seam = False
         # seedPerfectIslands(context, bm,  op)
         islands = seedIslands(context,
-                              bm, op)
+                              bm, bm_dict, op)
     else:
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.mark_seam(clear=True)
-        bpy.ops.uv.seams_from_islands()
-        bpy.ops.mesh.select_all(action='DESELECT')
-        bm = bmesh.from_edit_mesh(me)
-        bm.faces.ensure_lookup_table()
+
         islands = getIslands(bm)
 
     if op.merge_iterations > 0:
         mergeIslands(context,
-                     bm, islands,
+                     bm, bm_dict, islands,
                      op)
 
-    # final unpack happens here, could be replaced with something better but this by now does pack
-    print('performing final unwrap')
-    # for f in bm.faces:
-    #     f.select = True
-    bpy.ops.mesh.select_all(action='SELECT')
+    #here was originally unwrap of everything, but we want to avoid it
+    #  - large meshes can take ages and the unwrap is already done during all the testing.
+    #
 
+    print('packing islands')
+    bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.select_all(action='SELECT')
-    unwrap(op)
+    #unwrap(op)
+    bpy.ops.uv.average_islands_scale()
+    bpy.ops.uv.pack_islands(margin=op.island_margin)
 
     wm.progress_end()
     # bpy.ops.object.editmode_toggle()
@@ -2503,13 +2629,12 @@ class AutoSeamUnwrap(Operator):
             layout.label(text='New Islands Generation:')
             layout.prop(self, 'island_style')
             if self.island_style == 'GROW':
-                layout.label(text='grow method is only for meshes up to 10k faces')
+                layout.label(text='grow method is recommended for meshes up to 200k faces')
                 # layout.prop(self, 'grow_iterations', text='Grow iterations')
             elif self.island_style == 'TILES':
-                layout.label(text='Tiles method is meant for meshes up to 1M faces')
+                layout.label(text='Tiles method is recommended for meshes up to 1M faces')
             elif self.island_style == 'CURVATURE':
-                layout.label(text='Curves method is fast for meshes up to 1M faces,'
-                                  ' but can generate overlaps.')
+                layout.label(text='Curves method is recommended for meshes up to 1M faces')
 
         layout.label(text='Island merging:')
         layout.prop(self, 'merge_iterations')
@@ -2573,7 +2698,7 @@ def menu_func(self, context):
     op.small_island_threshold = 400
     op.merge_iterations = 5
 
-    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Lowpoly hardsurface')
+    op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Growth - Hardsurface')
     op.init_seams = True
     op.growth_limit_angle = 3.14 / 10.0
     # op.grow_iterations = 6
@@ -2586,7 +2711,7 @@ def menu_func(self, context):
     op.island_style = 'GROW'
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
-                              text='AS Lowpoly organic')
+                              text='AS Growth - Organic')
     op.init_seams = True
     # op.grow_iterations = 6
     op.merge_iterations = 5

@@ -713,6 +713,7 @@ def seedIslandsGrowth(context, bm, bm_dict, op):
     grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face,
                          anglelimit_island=anglelimit_island, perimeter_limit=perimeter_limit)
     # select_islands(bm,islands)
+    # iterate and do the same with more loose conditions, enabling the islands go grow further.
     iters = 10
     for g in range(0, iters):
         donefaces = 0
@@ -2753,7 +2754,7 @@ def menu_func(self, context):
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
                               text='AS Merge Islands Only')
     op.init_seams = False
-    op.unwrap_method = 'COMFORMAL'
+    op.unwrap_method = 'CONFORMAL'
 
     op.merge_iterations = 5
     op.small_island_threshold = 800

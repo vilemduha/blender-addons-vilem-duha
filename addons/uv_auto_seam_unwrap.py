@@ -616,7 +616,8 @@ def getFaceNormalRatio(face):
     return maxn
 
 
-def grow_islands_limited(islands, islandindices, anglelimit_face2face=10, anglelimit_island=3.14 / 2):
+def grow_islands_limited(islands, islandindices, anglelimit_face2face=10, anglelimit_island=3.14 / 2,
+                         perimeter_limit=4):
     all = False
     while not all:
         grown = False
@@ -627,6 +628,7 @@ def grow_islands_limited(islands, islandindices, anglelimit_face2face=10, anglel
                 i_normal = island.faces[0].normal
                 # todo optimize this - check only border faces. otherwise it's crazy iteration inside the island.
                 for f in island.last_grown:
+
                     for e in f.edges:
                         for f1 in e.link_faces:
                             # for f1 in e.link_faces:
@@ -637,9 +639,10 @@ def grow_islands_limited(islands, islandindices, anglelimit_face2face=10, anglel
                                     i_angle = i_normal.angle(f1.normal)
                                 else:
                                     i_angle = 0
-                                # print('fangle',anglelimit_face2face,f_angle)
-                                # print('iangle',anglelimit_island,i_angle)
-                                if f_angle < anglelimit_face2face and i_angle < anglelimit_island:
+                                perimeter_ratio = f1.calc_perimeter() / e.calc_length()
+                                # print('fangle', f_angle, anglelimit_face2face, 'iangle', i_angle, anglelimit_island, 'peri', perimeter_ratio, perimeter_limit)
+
+                                if f_angle < anglelimit_face2face and i_angle < anglelimit_island and perimeter_ratio < perimeter_limit:
                                     islandindices[f1.index] = i
                                     island.faces.append(f1)
                                     new_grown.append(f1)
@@ -705,22 +708,32 @@ def seedIslandsGrowth(context, bm, bm_dict, op):
         island.index = i
         island.last_grown = [f]
 
+    perimeter_limit = 6
     print('first growth round')
     grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face,
-                         anglelimit_island=anglelimit_island)
-    for g in range(0, 10):
-        print(g)
+                         anglelimit_island=anglelimit_island, perimeter_limit=perimeter_limit)
+    # select_islands(bm,islands)
+    iters = 10
+    for g in range(0, iters):
         donefaces = 0
         for island in islands:
-            donefaces += len(island)
+            donefaces += len(island.faces)
             if island.can_grow:
                 island.last_grown = island.faces[:]
         if donefaces == len(bm.faces):
             break
+
         anglelimit_face2face = anglelimit_face2face * 1.25
-        grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face * 10,
-                             anglelimit_island=anglelimit_island * 1.2)
-    # select_islands(bm,islands)
+        perimeter_limit *= 1.25
+
+        if g == iters -1 :
+            anglelimit_face2face = 10
+            perimeter_limit = 100
+            anglelimit_island = 100
+        # print(g, donefaces, perimeter_limit, anglelimit_island, anglelimit_face2face)
+        grow_islands_limited(islands, islandindices, anglelimit_face2face=anglelimit_face2face,
+                             anglelimit_island=anglelimit_island * 1.2, perimeter_limit=perimeter_limit)
+        # select_islands((bm,islands))
     # select_islands(bm,islands)
     # try to smooth borders between islands.
     print('smooth borders')
@@ -729,12 +742,10 @@ def seedIslandsGrowth(context, bm, bm_dict, op):
             # print('smooth',i,n)
             smooth_borders(bm_dict, i, n, islandindices)
 
-    for f in bm.faces:
-        f.select = False
+
     # find island seams
     for i, island in enumerate(islands):
         for f in island.faces:
-            f.select = True
             for e in f.edges:
                 for f1 in e.link_faces:
                     if f == f1:
@@ -742,10 +753,14 @@ def seedIslandsGrowth(context, bm, bm_dict, op):
                     if islandindices[f1.index] != i:
                         e.seam = True
                         island.seams.append(e)
+
+
     # can't get steps directly because of uncertainity if the growth algo did reach all faces.
     # There might be possible unconnected parts or areas not reached from the seed points.
     # islands_for_test = islands
     islands_for_test = getIslands(bm)
+    # select_islands(bm, islands)
+
     # tests initial island quality
     good_islands, disqalified_islands = testIslandsQuality(bm, op, islands_for_test)
     print(len(good_islands), len(disqalified_islands))
@@ -1457,10 +1472,9 @@ def getCurvature(bm, smooth_steps=3, bm_dict=None):
         #     for v2i in item[1]:
         #         vgroup_weights_smooth[v2i] += vgroup_weights[item[0]] * (0.2 / len(item[1]))
 
-
-        for v1i in range(0,len(bm.verts)):
+        for v1i in range(0, len(bm.verts)):
             neighbours = bm_dict.v_neigbour_verts[v1i]
-            w =  vgroup_weights[v1i] * (0.2 / len(neighbours))
+            w = vgroup_weights[v1i] * (0.2 / len(neighbours))
             for v2i in neighbours:
                 vgroup_weights_smooth[v2i] += w
         vgroup_weights = vgroup_weights_smooth
@@ -2043,6 +2057,10 @@ def neglen(x):
     return -len(x)
 
 
+def get_ratio(test):
+    return test['ratio']
+
+
 def mergeIslands(context,
                  bm, bm_dict, islands,
                  op):
@@ -2171,8 +2189,8 @@ def mergeIslands(context,
 
                     # print(i1seams_length,i2seams_length,commonseam_length, commonseam_ratio)
                     # print('angle     peri     commonseam     facecounts')
-                    # print(angle_ratio,perimeter_ratio, commonseam_ratio,len(island1), len(island2))
-                    ratio = perimeter_ratio + angle_ratio * 2 + commonseam_ratio
+                    # print(angle_ratio, perimeter_ratio, commonseam_ratio, len(island1), len(island2))
+                    ratio = perimeter_ratio + angle_ratio * 3 + commonseam_ratio * 2
 
                     # drop the tests if not pass
                     if perimeter_ratio > op.island_shape_threshold:
@@ -2184,8 +2202,11 @@ def mergeIslands(context,
 
                     perimeter_tests.append(ratio)
                     test_islands.append({
+                        'island1': island1,
                         'island2': island2,
+                        'orig perimeter': orig_perimeter_ratio,
                         'common seams': eraseseam,
+                        'island1idx': i1idx,
                         'island2idx': island2idx,
                         'faces': newislandfaces,
                         'perimeter_ratio': perimeter_ratio,
@@ -2210,20 +2231,19 @@ def mergeIslands(context,
                     ready_for_test[i1idx] = True
                     ready_for_test[test['island2idx']] = True
 
-                    tests_prepared.append({'faces': test['faces'],
-                                           'orig perimeter': orig_perimeter_ratio,
-                                           'common seams': test['common seams'],
-                                           'island1': island1,
-                                           'island2': test['island2'],
-                                           'island1idx': i1idx,
-                                           'island2idx': test['island2idx'],
-                                           })
+                    tests_prepared.append(test)
+
         # todo this should be removed probably
         for f in bm.faces:
             f.select = False
 
         if len(tests_prepared) == 0:
             return;
+
+        # sort by quality and then reduce number of tests per iteration further.
+        tests_prepared.sort(key=get_ratio)
+        if len(tests_prepared) > 5:
+            tests_prepared = tests_prepared[:int(len(tests_prepared) / 2)]
 
         i = 0
         for t in tests_prepared:
@@ -2316,16 +2336,17 @@ def seed_with_merge(context, op):
                      bm, bm_dict, islands,
                      op)
 
-    #here was originally unwrap of everything, but we want to avoid it
+    # here was originally unwrap of everything, but we want to avoid it
     #  - large meshes can take ages and the unwrap is already done during all the testing.
     #
-
+    #using unwrap , by now some algos obviously don't unwrap all islands, have to check it , when all algorithms unwrap,
+    # then only packing can be used from here on.
     print('packing islands')
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.select_all(action='SELECT')
-    #unwrap(op)
-    bpy.ops.uv.average_islands_scale()
-    bpy.ops.uv.pack_islands(margin=op.island_margin)
+    unwrap(op)
+    # bpy.ops.uv.average_islands_scale()
+    # bpy.ops.uv.pack_islands(margin=op.island_margin)
 
     wm.progress_end()
     # bpy.ops.object.editmode_toggle()
@@ -2635,6 +2656,7 @@ class AutoSeamUnwrap(Operator):
                 layout.label(text='Tiles method is recommended for meshes up to 1M faces')
             elif self.island_style == 'CURVATURE':
                 layout.label(text='Curves method is recommended for meshes up to 1M faces')
+        layout.prop(self, 'unwrap_method')
 
         layout.label(text='Island merging:')
         layout.prop(self, 'merge_iterations')
@@ -2680,6 +2702,8 @@ def menu_func(self, context):
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Scan/dyntopo - Tiles')
     op.init_seams = True
     op.island_style = 'TILES'
+    op.unwrap_method = 'CONFORMAL'
+
     op.angle_deformation_ratio_threshold = 1.4
     op.area_deformation_ratio_threshold = 1.4
     op.island_shape_threshold = 2.0
@@ -2690,6 +2714,8 @@ def menu_func(self, context):
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Scan/dyntopo - Curvature')
     op.init_seams = True
     op.island_style = 'CURVATURE'
+    op.unwrap_method = 'ANGLE_BASED'
+
     op.curvature_smooth_steps = 10
     op.seed_points = 30
     op.angle_deformation_ratio_threshold = 1.2
@@ -2700,7 +2726,8 @@ def menu_func(self, context):
 
     op = self.layout.operator(AutoSeamUnwrap.bl_idname, text='AS Growth - Hardsurface')
     op.init_seams = True
-    op.growth_limit_angle = 3.14 / 10.0
+    op.unwrap_method = 'CONFORMAL'
+    op.growth_limit_angle = 3.14 / 8.0
     # op.grow_iterations = 6
     op.merge_iterations = 5
     op.small_island_threshold = 150
@@ -2713,6 +2740,7 @@ def menu_func(self, context):
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
                               text='AS Growth - Organic')
     op.init_seams = True
+    op.unwrap_method = 'ANGLE_BASED'
     # op.grow_iterations = 6
     op.merge_iterations = 5
     op.small_island_threshold = 300
@@ -2725,6 +2753,8 @@ def menu_func(self, context):
     op = self.layout.operator(AutoSeamUnwrap.bl_idname,
                               text='AS Merge Islands Only')
     op.init_seams = False
+    op.unwrap_method = 'COMFORMAL'
+
     op.merge_iterations = 5
     op.small_island_threshold = 800
     op.angle_deformation_ratio_threshold = 1.6

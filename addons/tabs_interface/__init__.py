@@ -520,9 +520,9 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
             # split = split.split()
             if prefs.show_hiding_icon:
                 if prefs.hiding:
-                    icon = 'VISIBLE_IPO_OFF'
+                    icon = 'HIDE_ON'
                 else:
-                    icon = 'VISIBLE_IPO_ON'
+                    icon = 'HIDE_OFF'
                 firstrow.prop(prefs, 'hiding', icon_only=True, icon=icon, emboss=not prefs.emboss)
 
     else:  # GRID  layout
@@ -604,9 +604,9 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
                         row = split.split(align=True)
                     if prefs.show_hiding_icon:
                         if prefs.hiding:
-                            icon = 'VISIBLE_IPO_OFF'
+                            icon = 'HIDE_ON'
                         else:
-                            icon = 'VISIBLE_IPO_ON'
+                            icon = 'HIDE_OFF'
                         row.prop(prefs, 'hiding', icon_only=True, icon=icon, emboss=not prefs.emboss)
                 ti = 0
                 rows += 1

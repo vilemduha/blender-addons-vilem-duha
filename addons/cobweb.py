@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Cobweb",
     "author": "Vilem Duha",
-    "version": (2, 1),
-    "blender": (2, 80, 0),
+    "version": (2, 2),
+    "blender": (2, 92, 0),
     "location": "View3D > Add > Mesh > Cobweb",
     "description": "Adds a generative cobweb",
     "warning": "",
@@ -88,7 +88,7 @@ def addhits(self, context, event, ray_max=100000.0):
 
     vec = ray_target - ray_origin
 
-    result, hit, normal, face_index, object, matrix = scene.ray_cast(bpy.context.view_layer, ray_origin, vec)
+    result, hit, normal, face_index, object, matrix = scene.ray_cast(bpy.context.view_layer.depsgraph, ray_origin, vec)
 
     # cast rays and find the closest object
     best_length_squared = ray_max * ray_max
@@ -474,26 +474,30 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
         for a in range(0, 10):
             bpy.ops.mesh.select_all(action='DESELECT')
             for v in bm.verts:
+                #bring verts closest to ends back to ends, to avoid movement towards center too much
                 if len(v.link_edges) == 1:
                     e = v.link_edges[0]
                     for v1 in e.verts:
                         if v1 != v:
                             v1.co = v.co
             if a < 4:
+                #Gravity effect
                 for v in bm.verts:
                     if len(v.link_edges) > 1:
                         v.co.z -= drop_amount * .1
                         v.select = True
+            bmesh.update_edit_mesh(me, True)
+
             if a < 9:
-                bpy.ops.mesh.vertices_smooth(repeat=int(smooth_iterations / 10))
+                bpy.ops.mesh.vertices_smooth(factor = 1.0, repeat=int(smooth_iterations / 10))
+
             else:
-                bpy.ops.mesh.vertices_smooth(repeat=1)
+                bpy.ops.mesh.vertices_smooth(factor = 1.0,repeat=1)
     else:
         for v in bm.verts:
             if len(v.link_edges) > 1:
                 v.select = True
-        bpy.ops.mesh.vertices_smooth(repeat=98)
-
+        bpy.ops.mesh.vertices_smooth(factor = 1.0,repeat=98)
     # Show the updates in the viewport
     # and recalculate n-gon tessellation.
     bmesh.update_edit_mesh(me, True)
@@ -729,18 +733,19 @@ class AddCobweb(bpy.types.Operator):
 
     def execute(self, context):
         bpy.context.view_layer.update()
-
+        if bpy.context.active_object:
+                bpy.ops.object.mode_set(mode='OBJECT')
         generate_cobweb(self.pointcount,
-                        self.pick_close_tries,
-                        self.condist2,
-                        self.subdivision1,
-                        self.connections,
-                        self.radius,
-                        self.add_cloth,
-                        self.smooth_iterations,
-                        self.enable_viewport_rendering,
-                        self.drop_amount
-                        )
+            self.pick_close_tries,
+            self.condist2,
+            self.subdivision1,
+            self.connections,
+            self.radius,
+            self.add_cloth,
+            self.smooth_iterations,
+            self.enable_viewport_rendering,
+            self.drop_amount
+            )
         return {'FINISHED'}
 
     def invoke(self, context, event):

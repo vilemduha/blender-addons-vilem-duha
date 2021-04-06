@@ -507,7 +507,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     # add cloth
     if add_cloth:
         bpy.ops.object.modifier_add(type='CLOTH')
-        # bpy.context.object.modifiers["Cloth"].settings.use_pin_cloth = True
+        bpy.context.object.modifiers["Cloth"].settings.bending_model = 'LINEAR'
         bpy.context.object.modifiers["Cloth"].settings.vertex_group_mass = "Group"
     # make renderable
 
@@ -778,7 +778,7 @@ class AddCobweb(bpy.types.Operator):
         layout.prop(self, "smooth_iterations")
         layout.prop(self, "radius")
         layout.prop(self, "enable_viewport_rendering")
-        # layout.prop(self, "add_cloth")
+        layout.prop(self, "add_cloth")
         # col.prop(self, "my_bool")
 
         # col.prop(self, "my_string")
@@ -895,7 +895,7 @@ class COBWEB_Panel(bpy.types.Panel):
         layout.prop(cs, "smooth_iterations")
         layout.prop(cs, "radius")
         layout.prop(cs, "enable_viewport_rendering")
-        # layout.prop(cs, "add_cloth")
+        layout.prop(cs, "add_cloth")
 
 
 def register():

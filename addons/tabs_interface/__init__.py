@@ -16,6 +16,7 @@ import bpy, bpy_types
 from bpy.app.handlers import persistent
 from tabs_interface import panel_order
 import copy  # for deepcopy dicts
+import inspect
 
 DEBUG = True
 
@@ -206,7 +207,7 @@ def getlabel(panel):
     return panel.bl_label
 
 
-DONT_USE = ['DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints']
+DONT_USE = ['DATA_PT_modifiers', 'OBJECT_PT_constraints', 'BONE_PT_constraints', '__dir__']
 
 
 def getPanelIDs():
@@ -225,7 +226,10 @@ def getPanelIDs():
             tp = getattr(bpy.types, tp_name)
             # if hasattr(tp, 'bl_region_type'):
             #     print('region type', tp.bl_region_type, tp.bl_space_type)
-            if tp == panel_tp or \
+            # print(' co to je tp?')
+            # print(tp)
+            # print(dir(tp))
+            if tp == panel_tp or not inspect.isclass(tp) or \
                     not issubclass(tp, panel_tp) or tp.bl_space_type == 'PREFERENCES' or \
                     hasattr(tp, 'bl_region_type') and tp.bl_region_type == 'HEADER':
                 # if hasattr(tp, 'bl_region_type'):
@@ -1800,7 +1804,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
                                                description='switch to/from hiding mode', default=False,
                                                update=updateDisabling)
     disable_MODIFIERS: bpy.props.BoolProperty(name='Disable for modifiers and constraints',
-                                              description='switch to/from hiding mode', default=False,
+                                              description='switch to/from hiding mode', default=True,
                                               update=updateDisabling)
 
     panelData: bpy.props.CollectionProperty(type=panelData)
@@ -1832,7 +1836,7 @@ class TabInterfacePreferences(bpy.types.AddonPreferences):
             b.prop(self, "disable_TOOLBAR")
             b.prop(self, "disable_UI")
             b.prop(self, "disable_PROPERTIES")
-            b.prop(self, "disable_MODIFIERS")
+            # b.prop(self, "disable_MODIFIERS")
         layout.prop(self, "reorder_panels")
 
 
@@ -1929,9 +1933,10 @@ def overrideDrawFunctions():
         s['functions_overwrite_success'] = False
     if not s['functions_overwrite_success']:
         try:
-            bpy.types.DATA_PT_modifiers.draw = modifiersDraw
-            bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
-            bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
+            # Modifiers and constraints are reorderable and were disabled by now.
+            # bpy.types.DATA_PT_modifiers.draw = modifiersDraw
+            # bpy.types.OBJECT_PT_constraints.draw = constraintsDraw
+            # bpy.types.BONE_PT_constraints.draw = boneConstraintsDraw
             s['functions_overwrite_success'] = True
         except:
             pass

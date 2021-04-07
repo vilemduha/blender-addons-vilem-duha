@@ -63,11 +63,19 @@ def smartPoll(cls, context):
     if item == None:
         return False
 
+    # print('smart poll')
+
+
     if hasattr(cls, 'bl_parent_id'):
         # TODO the parent should be written on initialization
         parent = eval('bpy.types.' + cls.bl_parent_id)
         polled = parent.poll(context) and polled
 
+        # if cls.bl_label == 'Categories':
+        #     print('smart poll categories')
+        #     print(cls.bl_parent_id, parent.poll(context))
+        #     print('result:', ((item.activated and item.activated_category) or item.pin) and polled and item.show and (
+        # prefs.original_panels))
     return ((item.activated and item.activated_category) or item.pin) and polled and item.show and (
         prefs.original_panels)
 
@@ -713,9 +721,19 @@ def drawTabs(self, context, plist, tabID):
 
     for p in plist:
         pdata = panel_data[p.realID]
-        if p not in draw_panels and pdata.pin or (
-                pdata.activated and (len(categories) == 1 or p.orig_category == active_category)):
+        if p not in draw_panels and pdata.pin:
             draw_panels.append(p)
+            continue
+
+        if (pdata.activated and (len(categories) == 1 or p.orig_category == active_category)):
+            add_panel = True
+            #go through parents to check activation status
+            ppanel = p
+            while add_panel and hasattr(ppanel, 'bl_parent_id'):
+                    ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
+                    add_panel = add_panel and panel_data[ppanel.realID].activated
+            if add_panel:
+                draw_panels.append(p)
 
     if len(categories) > 0:
         # print('hascategories')
@@ -806,22 +824,19 @@ def drawTabs(self, context, plist, tabID):
             else:
                 visible = True
 
-                if not hasattr(p, 'bl_parent_id'):
-                    level = 0
-                    print(level, p)
-
-                else:
-                    ppanel = eval('bpy.types.' + p.bl_parent_id)
-                    print('source', p)
-                    print(level, ppanel)
-                    level = 1
+                level = 0
+                #check if parents are all activated:
+                ppanel = p
+                while visible and hasattr(ppanel, 'bl_parent_id'):
+                    level += 1
+                    #print( panel_data[ppanel.parent])
+                    ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
+                    # if hasattr(ppanel, 'bl_parent_id'):
                     visible = visible and panel_data[ppanel.realID].activated
-                    while visible and hasattr(ppanel, 'bl_parent_id'):
-                        level += 1
-                        #print( panel_data[ppanel.parent])
-                        ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
-                        # if hasattr(ppanel, 'bl_parent_id'):
-                        visible = visible and panel_data[ppanel.realID].activated
+
+
+
+
 
                 maxlevel = max(maxlevel, level)
                 if visible:
@@ -830,7 +845,7 @@ def drawTabs(self, context, plist, tabID):
                     tabpanels[level].append(p)
                     tdata[level].append(panel_data[p.realID])
                     active[level].append(panel_data[p.realID].activated)
-        print(texts)
+        # print(texts)
         # Draw all tabs including subtabs. Maaaadneeeesss.
         if tabpanel_data.show:
             if len(categories) == 1:
@@ -838,7 +853,7 @@ def drawTabs(self, context, plist, tabID):
             else:
                 tabpanel = None
             for level in range(0, maxlevel + 1):
-                print(f'drawing level {level} from {maxlevel}')
+                # print(f'drawing level {level} from {maxlevel}')
                 tabops = drawTabsLayout(self, context, maincol, tabpanel=tabpanel, operator_name='wm.activate_panel',
                                         texts=texts[level], ids=ids[level], tdata=tdata[level], active=active[level],
                                         enable_hiding=False)
@@ -1479,6 +1494,17 @@ class ActivateCategory(bpy.types.Operator):
                 pdata.activated_category = False
         return self.execute(context)
 
+# class testContext(bpy.types.Operator):
+#     """ panel order utility"""
+#     bl_idname = 'wm.test_context'
+#     bl_label = 'Test context'
+#     bl_options = {'REGISTER'}
+#
+#     def execute(self, context):
+#         print('test context')
+#         print(dir(context))
+#         print(bpy.types.VIEW3D_PT_blenderkit_unified.poll(context))
+#         return {'FINISHED'}
 
 '''        
 class PopupPanel(bpy.types.Operator):
@@ -2004,6 +2030,9 @@ def every_2_seconds():
 def register():
     # bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
     # bpy.utils.register_class(VIEW3D_PT_transform)#we need this panel :()
+
+    #disable later, just for testing:
+    # bpy.utils.register_class(testContext)
 
     bpy.utils.register_class(PanelUp)
     bpy.utils.register_class(PanelDown)

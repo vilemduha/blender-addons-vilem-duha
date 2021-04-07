@@ -71,11 +71,6 @@ def smartPoll(cls, context):
         parent = eval('bpy.types.' + cls.bl_parent_id)
         polled = parent.poll(context) and polled
 
-        # if cls.bl_label == 'Categories':
-        #     print('smart poll categories')
-        #     print(cls.bl_parent_id, parent.poll(context))
-        #     print('result:', ((item.activated and item.activated_category) or item.pin) and polled and item.show and (
-        # prefs.original_panels))
     return ((item.activated and item.activated_category) or item.pin) and polled and item.show and (
         prefs.original_panels)
 
@@ -686,6 +681,7 @@ def drawTabs(self, context, plist, tabID):
 
     # print('au')
     draw_panels = []
+    draw_panels_levels = [[],[],[],[],[]]
     categories = {}
     categories_list = []  # this because it can be sorted, not like dict.
 
@@ -722,18 +718,31 @@ def drawTabs(self, context, plist, tabID):
     for p in plist:
         pdata = panel_data[p.realID]
         if p not in draw_panels and pdata.pin:
-            draw_panels.append(p)
+            ppanel = p
+            level = 0
+            while hasattr(ppanel, 'bl_parent_id'):
+                level += 1
+                ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
+
+            draw_panels_levels[level].append(p)
             continue
 
         if (pdata.activated and (len(categories) == 1 or p.orig_category == active_category)):
             add_panel = True
             #go through parents to check activation status
             ppanel = p
+
+            level = 0
             while add_panel and hasattr(ppanel, 'bl_parent_id'):
+                    level +=1
                     ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
                     add_panel = add_panel and panel_data[ppanel.realID].activated
+
             if add_panel:
-                draw_panels.append(p)
+                draw_panels_levels[level].append(p)
+
+    for level in draw_panels_levels:
+        draw_panels.extend(level)
 
     if len(categories) > 0:
         # print('hascategories')
@@ -1027,7 +1036,9 @@ def boneConstraintsDraw(self, context):
 def drawPanels(self, context, draw_panels):
     layout = self.layout
     # print(draw_panels)
+
     for drawPanel in draw_panels:
+
         # not needed anymore, new drawing from instance ;)
         # for var in dir(drawPanel):
         #    if var not in DEFAULT_PANEL_PROPS:

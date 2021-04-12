@@ -28,7 +28,7 @@ USE_DEFAULT_POLL = False  # Pie menu editor compatibility
 _counter = 0
 
 IGNORE_SPACES = ('TOPBAR', 'INFO', 'PREFERENCES')
-IGNORE_REGIONS = ('HEADER', 'NAVIGATION_BAR', 'TOOLS')
+IGNORE_REGIONS = ('HEADER', 'NAVIGATION_BAR', 'TOOLS', 'TOOL_HEADER')
 
 
 @classmethod

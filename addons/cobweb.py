@@ -918,7 +918,7 @@ def unregister():
     bpy.utils.unregister_class(CobwebSettings)
     bpy.utils.unregister_class(COBWEB_Panel)
     # bpy.utils.unregister_class(FinishCobweb)
-    bpy.types.INFO_MT_mesh_add.remove(menu_func)
+    bpy.types.VIEW3D_MT_mesh_add.remove(menu_func)
     s = bpy.types.Scene
     del s.cobweb_settings
 

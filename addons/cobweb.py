@@ -2,7 +2,7 @@ bl_info = {
     "name": "Cobweb",
     "author": "Vilem Duha",
     "version": (2, 2),
-    "blender": (2, 92, 0),
+    "blender": (2, 93, 0),
     "location": "View3D > Add > Mesh > Cobweb",
     "description": "Adds a generative cobweb",
     "warning": "",
@@ -486,7 +486,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
                     if len(v.link_edges) > 1:
                         v.co.z -= drop_amount * .1
                         v.select = True
-            bmesh.update_edit_mesh(me, True)
+            bmesh.update_edit_mesh(me)
 
             if a < 9:
                 bpy.ops.mesh.vertices_smooth(factor = 1.0, repeat=int(smooth_iterations / 10))
@@ -500,7 +500,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
         bpy.ops.mesh.vertices_smooth(factor = 1.0,repeat=98)
     # Show the updates in the viewport
     # and recalculate n-gon tessellation.
-    bmesh.update_edit_mesh(me, True)
+    bmesh.update_edit_mesh(me)
 
     bpy.ops.object.editmode_toggle()
     obj = bpy.context.active_object

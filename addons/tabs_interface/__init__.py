@@ -10,13 +10,20 @@ bl_info = {
     "tracker_url": "",
     "category": "All"}
 
-import bpy, os, math, string, random, time
-import inspect
-import bpy, bpy_types
-from bpy.app.handlers import persistent
-from tabs_interface import panel_order
+import bpy
+import bpy
+import bpy_types
 import copy  # for deepcopy dicts
 import inspect
+import inspect
+import math
+import os
+import random
+import string
+import time
+from bpy.app.handlers import persistent
+
+from tabs_interface import panel_order
 
 DEBUG = True
 
@@ -64,7 +71,6 @@ def smartPoll(cls, context):
         return False
 
     # print('smart poll')
-
 
     if hasattr(cls, 'bl_parent_id'):
         # TODO the parent should be written on initialization
@@ -681,7 +687,7 @@ def drawTabs(self, context, plist, tabID):
 
     # print('au')
     draw_panels = []
-    draw_panels_levels = [[],[],[],[],[]]
+    draw_panels_levels = [[], [], [], [], []]
     categories = {}
     categories_list = []  # this because it can be sorted, not like dict.
 
@@ -729,14 +735,14 @@ def drawTabs(self, context, plist, tabID):
 
         if (pdata.activated and (len(categories) == 1 or p.orig_category == active_category)):
             add_panel = True
-            #go through parents to check activation status
+            # go through parents to check activation status
             ppanel = p
 
             level = 0
             while add_panel and hasattr(ppanel, 'bl_parent_id'):
-                    level +=1
-                    ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
-                    add_panel = add_panel and panel_data[ppanel.realID].activated
+                level += 1
+                ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
+                add_panel = add_panel and panel_data[ppanel.realID].activated
 
             if add_panel:
                 draw_panels_levels[level].append(p)
@@ -834,18 +840,14 @@ def drawTabs(self, context, plist, tabID):
                 visible = True
 
                 level = 0
-                #check if parents are all activated:
+                # check if parents are all activated:
                 ppanel = p
                 while visible and hasattr(ppanel, 'bl_parent_id'):
                     level += 1
-                    #print( panel_data[ppanel.parent])
+                    # print( panel_data[ppanel.parent])
                     ppanel = eval('bpy.types.' + ppanel.bl_parent_id)
                     # if hasattr(ppanel, 'bl_parent_id'):
                     visible = visible and panel_data[ppanel.realID].activated
-
-
-
-
 
                 maxlevel = max(maxlevel, level)
                 if visible:
@@ -1505,6 +1507,7 @@ class ActivateCategory(bpy.types.Operator):
                 pdata.activated_category = False
         return self.execute(context)
 
+
 # class testContext(bpy.types.Operator):
 #     """ panel order utility"""
 #     bl_idname = 'wm.test_context'
@@ -1956,8 +1959,8 @@ def createSceneTabData():
         for a in w.screen.areas:
             if a.type != 'INFO':
                 for r in a.regions:
-                    override = {'window': w, 'screen': w.screen, 'area': a, 'region': r}
-                    bpy.ops.view2d.scroll_up(override, deltax=0, deltay=5000)
+                    with bpy.context.temp_override(window=w, screen=w.screen, area=a, region=r):
+                        bpy.ops.view2d.scroll_up(deltax=0, deltay=5000)
 
                     # print(r.type)
                     r.tag_redraw()
@@ -2030,19 +2033,11 @@ def scene_update_handler():
     return 1
 
 
-def every_2_seconds():
-    while not tasks_queue.empty():
-        print('as a task:   ')
-        fstring = tasks_queue.get()
-        eval(fstring)
-    return 2.0
-
-
 def register():
     # bpy.utils.register_class(VIEW3D_PT_Transform)#we need this panel :()
     # bpy.utils.register_class(VIEW3D_PT_transform)#we need this panel :()
 
-    #disable later, just for testing:
+    # disable later, just for testing:
     # bpy.utils.register_class(testContext)
 
     bpy.utils.register_class(PanelUp)

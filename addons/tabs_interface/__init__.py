@@ -15,17 +15,17 @@ import bpy
 import bpy_types
 import copy  # for deepcopy dicts
 import inspect
-import inspect
 import math
 import os
 import random
+import re
 import string
 import time
 from bpy.app.handlers import persistent
 
 from tabs_interface import panel_order
 
-DEBUG = True
+DEBUG = False
 
 _update_tabs = []
 # _update_pdata = []
@@ -94,14 +94,59 @@ def drawHeaderPin(cls, context):
         cls.orig_draw_header(context)
 
 
+def format_header_text(text):
+    # Replace underscores with spaces and capitalize each word
+    return ' '.join(word.capitalize() for word in text.replace('_', ' ').split())
+
+
+def introspect_draw_header(draw_header_method):
+    """
+    Inspects the draw_header method of a Blender panel and extracts the text used within it.
+
+    Args:
+    draw_header_method (function): The draw_header method of a Blender panel to be introspected.
+
+    Returns:
+    str: The extracted text from the draw_header method. It returns an empty string if no text is found.
+    """
+
+    # Retrieve the source code of the draw_header method
+    source_code = inspect.getsource(draw_header_method)
+    print('source code', source_code)
+    # Regex pattern to find instances of text='something' or text="something" inside parentheses
+    pattern = re.compile(r'\([^)]*?text=["\'](.*?)["\'][^)]*?\)')
+    matches = pattern.findall(source_code)
+
+    # Loop through matches to find the first non-empty match
+    match = ''
+    for m in matches:
+        if m != '':
+            match = m
+            break
+
+    # If no match found, look for property names used in layout.prop calls with an empty text attribute
+    if match == '':
+        pattern_prop = re.compile(r'\.prop\([^,]+,\s*["\'](.*?)["\']\s*,\s*text=["\']["\']\)')
+        matches_prop = pattern_prop.findall(source_code)
+        for m in matches_prop:
+            if m != '':
+                match = format_header_text(m)
+                break
+
+    # Return the found text, or an empty string if none is found
+    return match
+
+
 def processPanelForTabs(panel):
+    # processed panels have a realID attribute
     if not hasattr(panel, 'realID'):
-        panel.had_category = False
+
         panel.realID = panel.bl_rna.identifier
+
+        # process panel category
+        panel.had_category = False
         if hasattr(panel, 'bl_category'):
             panel.had_category = True
-            # if panel.bl_category == 'Archimesh':
-            # print ('ARCHISHIT')
             if not hasattr(panel, 'orig_category'):
                 panel.orig_category = panel.bl_category
             panel.bl_category = 'Tools'
@@ -109,22 +154,31 @@ def processPanelForTabs(panel):
         #     panel.bl_category = 'Tools'
         #     panel.orig_category = 'Misc'
         else:
+            # use tools for all panels without category
             panel.bl_category = 'Tools'
             panel.orig_category = 'Tools'
 
-            #
+        # process and rewrite panel poll
         if not hasattr(panel, 'opoll'):
             if not hasattr(panel, 'poll'):
                 panel.poll = yesPoll
             panel.opoll = panel.poll
             panel.poll = smartPoll
 
-        if hasattr(panel, 'draw_header'):
-            panel.orig_draw_header = panel.draw_header
+        # backup and rewrite original draw header function
+        if hasattr(panel, 'draw_header') and panel.bl_label == '':
+            h_text = introspect_draw_header(panel.draw_header)
+            if h_text != '':
+                panel.orig_bl_label = panel.bl_label
+                panel.bl_label = h_text
+                print('header text', h_text)
 
+            panel.orig_draw_header = panel.draw_header
         panel.draw_header = drawHeaderPin
 
+        # goodby original panel!
         bpy.utils.unregister_class(panel)
+
         if hasattr(panel, 'bl_options'):
             if 'DEFAULT_CLOSED' in panel.bl_options:
                 panel.bl_options.remove('DEFAULT_CLOSED')
@@ -262,6 +316,7 @@ def getPanelIDs():
 
 
 def buildTabDir(panels):
+    ''' rebuilds tab directory '''
     if DEBUG:
         print('rebuild tabs ', len(panels))
     # disabled reading from scene,
@@ -290,7 +345,6 @@ def buildTabDir(panels):
                                     # nregion.append(panel)
                         space[rname] = nregion
 
-    # print('called buildtabdir')
     for panel in panels:
 
         if hasattr(panel, 'bl_space_type'):
@@ -326,7 +380,7 @@ def buildTabDir(panels):
                 # print(p)
                 # print(p.bl_rna.identifier , p.is_registered)
                 if not p.is_registered:
-                    print('non registered', p)
+                    # print('non registered', p)
                     region.remove(p)
     return spaces
 
@@ -408,6 +462,7 @@ def nextSplit(regwidth=100, width=None, ratio=None, last=0):  # 6 11 27
 
 
 def getApproximateFontStringWidth(st):
+    ui_scale = bpy.context.preferences.view.ui_scale
     size = 10
     for s in st:
         if s in 'i|':
@@ -428,38 +483,37 @@ def getApproximateFontStringWidth(st):
             size += 10
         else:
             size += 7
-    # print(size)
+    # Scale with blender UI scale
+    size = int(size * ui_scale) * 1.8
     return size  # Convert to picas
 
 
 def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activate_panel', texts=[], ids=[], tdata=[],
                    active='', enable_hiding=False):  # tdata=[],
     '''Creates and draws actual layout of tabs'''
+
+    # Fetch preferences and calculate initial layout dimensions
+    ui_scale = context.preferences.view.ui_scale
     prefs = bpy.context.preferences.addons["tabs_interface"].preferences
-    w = context.region.width
-    margin = 18
+    w = context.region.width  # width of the region
+    margin = int(18 * ui_scale)
     if prefs.box:
-        margin += 10
-    iconwidth = 20
+        margin += int(10 * ui_scale)
+    iconwidth = int(20 * ui_scale)
     oplist = []
 
+    # Optional box layout
     if prefs.box:
         layout = layout.box()
     layout = layout.column(align=True)
-    # layout.prop(prefs,'hiding' , icon_only = True, icon='RESTRICT_VIEW_OFF')
-    '''
-    if icons == []:
-        for t in texts:
-            icons.append('NONE')
-    '''
-    # bpy.props.BoolProperty(name="show", default=True)#, update = updatePin)
-    restpercent = 1
-    # COLLAPSEMENU
 
-    if not prefs.fixed_width:  # variable width layout <3
+    # Initialize variables for dynamic width calculation
+
+    if not prefs.fixed_width:  # DYNAMIC layout
         baserest = w - margin
         restspace = baserest
 
+        # Variables for tab width and alignment
         tw = 0
         splitalign = True
         row = tabRow(layout)
@@ -468,9 +522,10 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
         rows = 0
         i = 0
         lastsplit = None
-        for t, id in zip(texts, ids):
 
-            last_tw = tw
+        # Iterate through each tab
+        for t, id in zip(texts, ids):
+            # Calculate tab width and adjust layout accordingly
             if prefs.emboss and restspace != baserest:
                 drawtext = '| ' + t
             else:
@@ -489,6 +544,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
 
             oldrestspace = restspace
             restspace = restspace - tw
+
             if restspace > 0:
 
                 split = split.split(factor=tw / oldrestspace, align=splitalign)
@@ -538,11 +594,13 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
                     icon = 'HIDE_OFF'
                 firstrow.prop(prefs, 'hiding', icon_only=True, icon=icon, emboss=not prefs.emboss)
 
-    else:  # GRID  layout
+    else:  # Fixed width (grid) layout
+        # Calculate tab width and number of columns
         w = w - margin
         wtabcount = math.floor(w / 80)
         if wtabcount == 0:
             wtabcount = 1
+
         if prefs.fixed_columns:
 
             space = context.area.type
@@ -563,6 +621,7 @@ def drawTabsLayout(self, context, layout, tabpanel=None, operator_name='wm.activ
         # hiding
         i = 0
 
+        # Loop through each tab and construct the grid layout
         for t, id in zip(texts, ids):
             if tabpanel != None and i == 0 and prefs.enable_folding:
                 ratio, lastsplit = nextSplit(regwidth=w, width=iconwidth, last=0)
@@ -796,6 +855,7 @@ def drawTabs(self, context, plist, tabID):
     layout = self.layout
     maincol = layout.column(align=True)
 
+    # draw panel categories first
     if len(categories) > 1:  # EVIL TOOL PANELS!
         # row=tabRow(maincol)
         if len(categories) > 1:
@@ -821,6 +881,7 @@ def drawTabs(self, context, plist, tabID):
             active_tab = category_active_tab
             hasactivetab = True
 
+    # draw panels tabs
     if len(plist) > 1:  # property windows
         # Draw panels here.
         # these are levels of subpanels(2.8 madness)
@@ -1935,7 +1996,8 @@ def createSceneTabData():
                         c = s.categories.add();
                         c.name = p.orig_category
             else:
-                print('unprocessed without realID', p)
+                pass
+                # print('unprocessed without realID', p)
 
     while len(_update_tabs) > 0:
         pt = _update_tabs.pop()

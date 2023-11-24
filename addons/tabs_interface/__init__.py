@@ -55,6 +55,15 @@ def smartPoll(cls, context):
 
     if USE_DEFAULT_POLL:
         return polled
+
+    # # print(cls.bl_rna.identifier, cls.bl_label, cls.bl_space_type, cls.bl_region_type, )
+    # if cls.bl_rna.identifier == 'VIEW3D_PT_blenderkit_categories':
+    #     print(cls.bl_rna.identifier, context.region.type, context.area.type, cls.bl_space_type, cls.bl_region_type)
+    # if cls.bl_region_type not in ('UI', 'WINDOW'):  # TOOLS', 'HEADER', 'NAVIGATION_BAR', 'TOOLS', 'TOOL_HEADER'):
+    #     print(cls.bl_rna.identifier, context.region.type, context.area.type, cls.bl_space_type, cls.bl_region_type)
+
+    if context.region.type == 'TOOL_HEADER':
+        return polled
     # print( ' smart poll', cls.realID)
     item = bpy.context.scene.panelData.get(cls.realID)
     # if item == None:
@@ -83,7 +92,9 @@ def smartPoll(cls, context):
 
 def drawHeaderPin(cls, context):
     layout = cls.layout
-    if hasattr(bpy.context.scene, 'panelData') and bpy.context.scene.panelData.get(cls.realID) is not None:
+
+    if (hasattr(bpy.context.scene, 'panelData') and bpy.context.scene.panelData.get(cls.realID) is not None and
+            context.region.type != 'TOOL_HEADER'):
         pd = bpy.context.scene.panelData[cls.realID]
         if pd.pin:
             icon = 'PINNED'
@@ -112,7 +123,6 @@ def introspect_draw_header(draw_header_method):
 
     # Retrieve the source code of the draw_header method
     source_code = inspect.getsource(draw_header_method)
-    print('source code', source_code)
     # Regex pattern to find instances of text='something' or text="something" inside parentheses
     pattern = re.compile(r'\([^)]*?text=["\'](.*?)["\'][^)]*?\)')
     matches = pattern.findall(source_code)
@@ -414,11 +424,6 @@ def layoutActive(self, context):
     #    r = layout.separator()
 
 
-def layoutSeparator(self, context):
-    layout = self.layout
-    layout.separator()
-
-
 class CarryLayout:
     def __init__(self, layout):
         self.layout = layout
@@ -710,6 +715,7 @@ def mySeparator(layout):
     prefs = bpy.context.preferences.addons["tabs_interface"].preferences
 
     if not prefs.box:
+        layout.separator()
         layout.separator()
     if prefs.emboss and not prefs.box:
         b = layout.box()

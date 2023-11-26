@@ -101,6 +101,7 @@ def drawHeaderPin(cls, context):
         else:
             icon = 'UNPINNED'
         layout.prop(bpy.context.scene.panelData[cls.realID], 'pin', icon_only=True, icon=icon, emboss=False)
+
     if hasattr(cls, 'orig_draw_header'):
         cls.orig_draw_header(context)
 
@@ -176,12 +177,12 @@ def processPanelForTabs(panel):
             panel.poll = smartPoll
 
         # backup and rewrite original draw header function
-        if hasattr(panel, 'draw_header') and panel.bl_label == '':
-            h_text = introspect_draw_header(panel.draw_header)
-            if h_text != '':
-                panel.orig_bl_label = panel.bl_label
-                panel.bl_label = h_text
-                print('header text', h_text)
+        if hasattr(panel, 'draw_header'):
+            if panel.bl_label == '':
+                h_text = introspect_draw_header(panel.draw_header)
+                if h_text != '':
+                    panel.orig_bl_label = panel.bl_label
+                    panel.bl_label = h_text
 
             panel.orig_draw_header = panel.draw_header
         panel.draw_header = drawHeaderPin
@@ -207,10 +208,12 @@ def fixOriginalPanel(tp_name):
         tp.poll = tp.opoll
         del tp.opoll
     if hasattr(tp, 'orig_draw_header'):
+        print(tp.bl_label)
         tp.draw_header = tp.orig_draw_header
         del tp.orig_draw_header
     else:
-        del tp.draw_header
+        if hasattr(tp, 'draw_header'):  # unprocessed panels might still have no draw_header
+            del tp.draw_header
     if hasattr(tp, 'orig_category'):
         tp.bl_category = tp.orig_category
         if not tp.had_category:
@@ -941,6 +944,9 @@ def drawTabs(self, context, plist, tabID):
                         op.tabpanel_id = tabID
                         op.category = active_category
 
+                if level < maxlevel:
+                    mySeparator(maincol)
+
     if len(draw_panels) == 0 and len(
             plist) > 0:  # and len(categories)== 1)or (len(categories)=>1 and len ) :# or (len(draw_panels == 0) and len(plist)>0):
         # if len(categories)>0:
@@ -1118,14 +1124,12 @@ def drawPanels(self, context, draw_panels):
 
             row = box.row()
             row.scale_y = .8
-
-            if hasattr(drawPanel, "draw_header"):
+            if hasattr(drawPanel, 'orig_draw_header'):
+                print('drawing header', drawPanel.bl_label)
                 fakeself = CarryLayout(row)
-                if hasattr(drawPanel, 'orig_draw_header'):
-                    drawPanel.orig_draw_header(fakeself, context)
-                # else:
-                #    drawPanel.draw_header(fakeself,context)
 
+                drawPanel.orig_draw_header(fakeself, context)
+            
             row.label(text=drawPanel.bl_label)
 
             pd = bpy.context.scene.panelData[drawPanel.realID]

@@ -10,17 +10,18 @@ bl_info = {
     "category": "Add Mesh",
 }
 
-import bpy, bpy_extras
-import bmesh, mathutils
-import random, math
-from bpy_extras import object_utils, mesh_utils
-from bpy_extras import view3d_utils
+import bmesh
+import bpy
+import bpy_extras
+import gpu
+import math
+import mathutils
+import random
 import time
 from bpy.props import *
-
-import bgl, gpu
+from bpy_extras import object_utils, mesh_utils
+from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
-
 
 
 def testConnectible(obj, v1, v2):
@@ -141,24 +142,24 @@ def createmesh(points):
 
 
 def draw_lines(vertices, indices, color):
-    # bgl.glEnable(bgl.GL_BLEND)
-    shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
     batch = batch_for_shader(shader, 'LINES', {"pos": vertices}, indices=indices)
     shader.bind()
     shader.uniform_float("color", color)
     batch.draw(shader)
 
+
 def draw_callback_3d(self, context):
-    coords =[]
+    coords = []
     lines = []
     for i, pp in enumerate(self.hits):
         # print('draw',pp)
         if i > 0:
-            d = pp[0] - self.hits[i-1][0]
+            d = pp[0] - self.hits[i - 1][0]
             if d.length < .5:
-                lines.append([i-1,i])
+                lines.append([i - 1, i])
         coords.append(pp[0])
-    draw_lines(coords, lines, (0.5,1,0.5,1))
+    draw_lines(coords, lines, (0.5, 1, 0.5, 1))
 
 
 class CobwebPaint(bpy.types.Operator):
@@ -216,7 +217,7 @@ class CobwebPaint(bpy.types.Operator):
             # if event.type in { 'RET', 'SPACE'}:
             # bpy.context.scene.objects.unlink(origmesh)
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            context.area.header_text_set(text = None)
+            context.area.header_text_set(text=None)
             msg = self.bl_label + ' (modal)'
 
             return {'FINISHED'}
@@ -224,7 +225,7 @@ class CobwebPaint(bpy.types.Operator):
         elif event.type in {'RIGHTMOUSE', 'ESC'}:
             # self.hits=[]
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-            context.area.header_text_set( text = None)
+            context.area.header_text_set(text=None)
             return {'CANCELLED'}
         else:
             return {'PASS_THROUGH'}
@@ -239,7 +240,7 @@ class CobwebPaint(bpy.types.Operator):
             # context.window_manager.modal_handler_add(self)
             self._handle = bpy.types.SpaceView3D.draw_handler_add(draw_callback_3d, args, 'WINDOW', 'POST_VIEW')
             context.window_manager.modal_handler_add(self)
-            context.area.header_text_set(text = 'Paint source points, SPACE/ENTER to confirm, ESC/RIGHTCLICK to cancel')
+            context.area.header_text_set(text='Paint source points, SPACE/ENTER to confirm, ESC/RIGHTCLICK to cancel')
             context.area.tag_redraw()
             return {'RUNNING_MODAL'}
         else:
@@ -264,8 +265,7 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     me.calc_loop_triangles()
     # recalculate tessfaces
 
-
-    tessfaces_select =[f for f in me.loop_triangles if me.polygons[f.polygon_index].select]
+    tessfaces_select = [f for f in me.loop_triangles if me.polygons[f.polygon_index].select]
     # TODO BRING SELECTION BACK
 
     # print(pointgroups,tessface_groups)
@@ -474,14 +474,14 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
         for a in range(0, 10):
             bpy.ops.mesh.select_all(action='DESELECT')
             for v in bm.verts:
-                #bring verts closest to ends back to ends, to avoid movement towards center too much
+                # bring verts closest to ends back to ends, to avoid movement towards center too much
                 if len(v.link_edges) == 1:
                     e = v.link_edges[0]
                     for v1 in e.verts:
                         if v1 != v:
                             v1.co = v.co
             if a < 4:
-                #Gravity effect
+                # Gravity effect
                 for v in bm.verts:
                     if len(v.link_edges) > 1:
                         v.co.z -= drop_amount * .1
@@ -489,15 +489,15 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
             bmesh.update_edit_mesh(me)
 
             if a < 9:
-                bpy.ops.mesh.vertices_smooth(factor = 1.0, repeat=int(smooth_iterations / 10))
+                bpy.ops.mesh.vertices_smooth(factor=1.0, repeat=int(smooth_iterations / 10))
 
             else:
-                bpy.ops.mesh.vertices_smooth(factor = 1.0,repeat=1)
+                bpy.ops.mesh.vertices_smooth(factor=1.0, repeat=1)
     else:
         for v in bm.verts:
             if len(v.link_edges) > 1:
                 v.select = True
-        bpy.ops.mesh.vertices_smooth(factor = 1.0,repeat=98)
+        bpy.ops.mesh.vertices_smooth(factor=1.0, repeat=98)
     # Show the updates in the viewport
     # and recalculate n-gon tessellation.
     bmesh.update_edit_mesh(me)
@@ -539,7 +539,6 @@ def generate_cobweb(pointcount, pick_close_tries, condist2, subdivision1, connec
     if not enable_viewport_rendering:
         bpy.context.object.modifiers["Screw"].show_viewport = False
         bpy.context.object.modifiers["Solidify"].show_viewport = False
-
 
     if bpy.data.materials.get('cobweb') == None:
         m = bpy.data.materials.new('cobweb')
@@ -734,18 +733,18 @@ class AddCobweb(bpy.types.Operator):
     def execute(self, context):
         bpy.context.view_layer.update()
         if bpy.context.active_object:
-                bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.mode_set(mode='OBJECT')
         generate_cobweb(self.pointcount,
-            self.pick_close_tries,
-            self.condist2,
-            self.subdivision1,
-            self.connections,
-            self.radius,
-            self.add_cloth,
-            self.smooth_iterations,
-            self.enable_viewport_rendering,
-            self.drop_amount
-            )
+                        self.pick_close_tries,
+                        self.condist2,
+                        self.subdivision1,
+                        self.connections,
+                        self.radius,
+                        self.add_cloth,
+                        self.smooth_iterations,
+                        self.enable_viewport_rendering,
+                        self.drop_amount
+                        )
         return {'FINISHED'}
 
     def invoke(self, context, event):

@@ -4,14 +4,15 @@ from math import *
 
 import bpy
 import numpy
+import os
 from bpy.props import *
 
 
 bl_info = {
     "name": "Bas relief",
     "author": "Vilem Novak",
-    "version": (0, 1, 0),
-    "blender": (3, 0, 0),
+    "version": (1, 0, 0),
+    "blender": (4, 0, 0),
     "location": "Properties > render",
     "description": "Converts zbuffer image to bas relief.",
     "warning": "there is no warranty. needs Numpy library installed in blender python directory.",
@@ -23,19 +24,11 @@ bl_info = {
 ##////////////////////////////////////////////////////////////////////
 # // Full Multigrid Algorithm for solving partial differential equations
 # //////////////////////////////////////////////////////////////////////
-# MODYF = 0 #/* 1 or 0 (1 is better) */
-# MINS = 16	#/* minimum size 4 6 or 100 */
-
-
-# SMOOTH_IT = 2 #/* minimum 1  */
-# V_CYCLE = 10 #/* number of v-cycles  2*/
-# ITERATIONS = 5
 
 # // precision
 EPS = 1.0e-32
 PRECISION = 5
 NUMPYALG = False
-# PLANAR_CONST=True
 
 
 def blur(a):
@@ -619,6 +612,7 @@ def numpysave(a, iname):
     r.image_settings.color_depth = "32"
 
     i.save_render(iname)
+    print("saved " + iname)
 
 
 def numpytoimage(a, iname):
@@ -734,12 +728,6 @@ def problemAreas(br):
     # scale down before:
     if br.gradient_scaling_mask_use:
         m = bpy.data.images[br.gradient_scaling_mask_name]
-        # mask=nar=imagetonumpy(m)
-
-    # if br.scale_down_before_use:
-    # 	i.scale(int(i.size[0]*br.scale_down_before),int(i.size[1]*br.scale_down_before))
-    # 	if br.gradient_scaling_mask_use:
-    # 		m.scale(int(m.size[0]*br.scale_down_before),int(m.size[1]*br.scale_down_before))
 
     nar = imagetonumpy(i)
     # return
@@ -780,10 +768,6 @@ def problemAreas(br):
     )
     silhx = numpy.logical_or(silhxpos, silhxneg)
     gx = gx * silhx + (1.0 / a * numpy.log(1.0 + a * (gx))) * (~silhx)  # attenuate
-
-    # if br.fade_distant_objects:
-    # 	gx*=(nar)
-    # 	gy*=(nar)
 
     silhypos = gy > silh_thres
     gy = (
@@ -834,7 +818,6 @@ def prepare_gradient(
     gy[:, :-1] = nar[:, 1:] - nar[:, :-1]
 
     # it' ok, we can treat neg and positive silh separately here:
-    # a = br.attenuation
     planar = nar < (nar.min() + 0.0001)  # numpy.logical_or(silhxplanar,silhyplanar)#
     # silhouettes recovery function:
     # first clip the gradient to the threshold
@@ -861,21 +844,11 @@ def prepare_gradient(
     silhxneg = gx < -silhouette_threshold
 
     gx = gx * (~silhxneg) - recover_silh * (silhxneg * silh_correction_x)
-    # silhx = numpy.logical_or(silhxpos, silhxneg)
-    # old attenuation, seemed to do nothing:
-    # gx = gx * ~silhx + (1.0 / a * numpy.log(1.0 + a * (gx))) * (silhx)  # attenuate
-
-    # if br.fade_distant_objects:
-    # 	gx*=(nar)
-    # 	gy*=(nar)
 
     silhypos = gy > silhouette_threshold
     gy = gy * (~silhypos) + recover_silh * (silhypos * silh_correction_y)
     silhyneg = gy < -silhouette_threshold
     gy = gy * (~silhyneg) - recover_silh * (silhyneg * silh_correction_y)
-    # silhy = numpy.logical_or(silhypos, silhyneg)  # both silh
-    # old attenuation, seemed to do nothing:
-    # gy = gy * ~silhy + (1.0 / a * numpy.log(1.0 + a * (gy))) * (silhy)  # attenuate
 
     # now scale slopes...
     if br.gradient_scaling_mask_use:
@@ -920,56 +893,6 @@ def relief(br):
         silhouette_threshold=br.silhouette_threshold,
     )
 
-    """
-    if br.detail_enhancement_use:  # fourier stuff here!disabled by now
-        print("detail enhancement")
-        rows, cols = gx.shape
-        crow, ccol = rows / 2, cols / 2
-        # dist=int(br.detail_enhancement_freq*gx.shape[0]/(2))
-        # bandwidth=.1
-        # dist=
-        divgmin = divg.min()
-        divg += divgmin
-        divgf = numpy.fft.fft2(divg)
-        divgfshift = numpy.fft.fftshift(divgf)
-        # mspectrum = 20*numpy.log(numpy.abs(divgfshift))
-        # numpytoimage(mspectrum,'mspectrum')
-        mask = divg.copy()
-        pos = numpy.array((crow, ccol))
-
-        # bpy.context.scene.view_settings.curve_mapping.initialize()
-        # cur=bpy.context.scene.view_settings.curve_mapping.curves[0]
-        def filterwindow(x, y, cx=0, cy=0):  # , curve=None):
-            return abs((cx - x)) + abs((cy - y))
-            # v=(abs((cx-x)/(cx))+abs((cy-y)/(cy)))
-            # return v
-
-        mask = numpy.fromfunction(
-            filterwindow, divg.shape, cx=crow, cy=ccol
-        )  # , curve=cur)
-        mask = numpy.sqrt(mask)
-        # for x in range(mask.shape[0]):
-        # 	for y in range(mask.shape[1]):
-        # 		mask[x,y]=cur.evaluate(mask[x,y])
-        maskmin = mask.min()
-        maskmax = mask.max()
-        mask = (mask - maskmin) / (maskmax - maskmin)
-        mask *= br.detail_enhancement_amount
-        mask += 1 - mask.max()
-        # mask+=1
-        crow = int(crow)
-        ccol = int(ccol)
-        mask[crow - 1 : crow + 1, ccol - 1 : ccol + 1] = (
-            1  # to preserve basic freqencies.
-        )
-        # numpytoimage(mask,'mask')
-        divgfshift = divgfshift * mask
-        divgfshift = numpy.fft.ifftshift(divgfshift)
-        divg = numpy.abs(numpy.fft.ifft2(divgfshift))
-        divg -= divgmin
-        divg = -divg
-        print("detail enhancement finished")
-    """
     levels = 0
     mins = min(nar.shape[0], nar.shape[1])
     while mins >= MINS:
@@ -1009,7 +932,7 @@ def relief(br):
             divg,
             target_high_freequency,
             2,
-            2,
+            1,
             1,
             mins,
             levels,
@@ -1017,28 +940,37 @@ def relief(br):
             planar,
         )
         tonemap(target_high_freequency)
-        target = target + (target_high_freequency - 0.5) * br.detail_enhancement_amount
-        # crop lower value
-        target = numpy.clip(target, 0, 1000)
-        tonemap(target)
+        if not br.output_detail_separate:
+            target = (
+                target + (target_high_freequency - 0.5) * br.detail_enhancement_amount
+            )
+            # crop lower value
+            target = numpy.clip(target, 0, 1000)
+            tonemap(target)
+        else:
+            basename = os.path.splitext(bpy.path.abspath(i.filepath))[0]
 
-    ipath = (
-        bpy.path.abspath(i.filepath)[: -len(bpy.path.basename(i.filepath))]
-        + br.output_image_name
-        + ".exr"
-    )
+            detail_image_path = basename + br.detail_suffix + ".exr"
+            numpysave(target_high_freequency, detail_image_path)
+
+    basename = os.path.splitext(bpy.path.abspath(i.filepath))[0]
+    ipath = basename + br.output_suffix + ".exr"
     numpysave(target, ipath)
     t = time.time() - t
     print("total time:" + str(t) + "\n")
-    # numpytoimage(target,br.output_image_name)
 
 
 class BasReliefsettings(bpy.types.PropertyGroup):
     source_image_name: bpy.props.StringProperty(
         name="Image source", description="image source"
     )
-    output_image_name: bpy.props.StringProperty(
-        name="Image target", description="image output name"
+    output_suffix: bpy.props.StringProperty(
+        name="Result suffix", description="image output suffix", default="_relief"
+    )
+    detail_suffix: bpy.props.StringProperty(
+        name="Detail enhancement suffix",
+        description="image output suffix",
+        default="_detail",
     )
     silhouette_threshold: bpy.props.FloatProperty(
         name="Silhouette threshold",
@@ -1104,17 +1036,7 @@ class BasReliefsettings(bpy.types.PropertyGroup):
     gradient_scaling_mask_name: bpy.props.StringProperty(
         name="Scaling mask name", description="mask name"
     )
-    scale_down_before_use: bpy.props.BoolProperty(
-        name="Scale down image before processing", description="", default=False
-    )
-    scale_down_before: bpy.props.FloatProperty(
-        name="Image scale",
-        description="Image scale",
-        min=0.025,
-        max=1.0,
-        default=0.5,
-        precision=PRECISION,
-    )
+
     detail_enhancement_use: bpy.props.BoolProperty(
         name="Enhance details ",
         description="enhance details by frequency analysis",
@@ -1128,6 +1050,9 @@ class BasReliefsettings(bpy.types.PropertyGroup):
         max=100.0,
         default=0.5,
         precision=PRECISION,
+    )
+    output_detail_separate: bpy.props.BoolProperty(
+        name="Output detail separately", description="", default=False
     )
 
     advanced: bpy.props.BoolProperty(
@@ -1166,7 +1091,7 @@ class BASRELIEF_Panel(bpy.types.Panel):
         layout.operator("scene.calculate_bas_relief", text="Calculate relief")
         layout.prop(br, "advanced")
         layout.prop_search(br, "source_image_name", bpy.data, "images")
-        layout.prop(br, "output_image_name")
+        layout.prop(br, "output_suffix")
 
         layout.prop(br, "silhouette_threshold")
         layout.prop(br, "recover_silhouettes")
@@ -1177,7 +1102,7 @@ class BASRELIEF_Panel(bpy.types.Panel):
         # layout.template_curve_mapping(br,'curva')
         if br.advanced:
             # layout.prop(br,'attenuation')
-            layout.prop(br, "min_gridsize")
+            # layout.prop(br, "min_gridsize")
             layout.prop(br, "smooth_iterations")
         layout.prop(br, "vcycle_iterations")
         layout.prop(br, "linbcg_iterations")
@@ -1189,18 +1114,9 @@ class BASRELIEF_Panel(bpy.types.Panel):
                 layout.prop_search(br, "gradient_scaling_mask_name", bpy.data, "images")
             layout.prop(br, "detail_enhancement_use")
             if br.detail_enhancement_use:
-                # layout.prop(br,'detail_enhancement_freq')
                 layout.prop(br, "detail_enhancement_amount")
-                # print(dir(layout))
-                # layout.prop(s.view_settings.curve_mapping,"curves")
-                # layout.label('Frequency scaling:')
-                # s.view_settings.curve_mapping.clip_max_y=2
-
-                # layout.template_curve_mapping(s.view_settings, "curve_mapping")
-
-        # layout.prop(br,'scale_down_before_use')
-        # if br.scale_down_before_use:
-        # 	layout.prop(br,'scale_down_before')
+                layout.prop(br, "output_detail_separate")
+                layout.prop(br, "detail_suffix")
 
 
 class DoBasRelief(bpy.types.Operator):
